@@ -34,6 +34,7 @@ queue_t blockedList = NULL;
 
 minithread_t currentThread = NULL;
 minithread_t deletionThread = NULL;
+semaphore_t threads_to_delete = semaphore_create();
 stack_pointer_t bogusPointer;
 int lastID =0;
 
@@ -63,6 +64,7 @@ int minithread_mark_dead(arg_t args)
 {
     //printf("Thread marked as dead.\n");
     minithread_self()->isDead = true;
+    semaphore_V(threads_to_delete);
     queue_append(deadQueue,minithread_self());
     minithread_yield();
     return 0; // THIS SHOULD NOT RETURN
@@ -138,8 +140,7 @@ void
 minithread_yield() {
     minithread_t nextThread = NULL;
     minithread_t temp = NULL;
-    int dequeueResult;
-    dequeueResult = queue_dequeue(readyQueue,(void**)&nextThread);
+    queue_dequeue(readyQueue,(void**)&nextThread);
 
     if(currentThread != NULL)
     {
@@ -188,12 +189,10 @@ int
 cleanup(arg_t args) {
     minithread_t toDelete = NULL;
     while(1) {
-        while(queue_dequeue(deadQueue,(void**)&toDelete) == 0)
-        {
-            minithread_free_stack(toDelete->stackbase);
-            free(toDelete);
-        }
-        minithread_yield();
+        semaphore_P(threads_to_delete);
+        queue_dequeue(deadQueue,(void**)&toDelete;
+        minithread_free_stack(toDelete->stackbase);
+        free(toDelete);
     }
     return 0;
 };
