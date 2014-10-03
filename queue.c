@@ -37,6 +37,9 @@ queue_new() {
 
 void *
 queue_first(queue_t queue) {
+  if (queue->first == NULL){
+    return NULL;
+  }
   return queue->first->val;
 }
 

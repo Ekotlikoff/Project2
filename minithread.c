@@ -227,16 +227,26 @@ void increment_clock_ticks(long *clock_ticks){
 void 
 clock_handler(void* arg)
 {
-    alarm_id this_alarm;
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
-    while (get_clock_ticks() == queue_first(alarm_queue)->when_to_execute){
-        this_alarm = queue_dequeue(alarm_queue);
-        this_alarm->alarm(this_alarm->arg);
+    while (get_clock_ticks() == first_execution_tick()){
+        printf("about to ring_alarm\n");
+        ring_alarm();
     }
     increment_clock_ticks(clock_ticks);
     set_interrupt_level(old_interrupt_level);
 
+}
+
+void
+f(void* arg){  // helper function for minithread_sleep_with_timeout
+  minithread_start((minithread_t) arg);
+}
+
+void
+minithread_sleep_with_timeout(int delay){
+  register_alarm(delay,f,(void *)minithread_self());
+  minithread_stop();
 }
 
 /*

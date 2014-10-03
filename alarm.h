@@ -14,9 +14,8 @@
 typedef void (*alarm_handler_t)(void*);
 typedef void *alarm_id;
 
-typedef struct alarm alarm;
-
-extern alarm_id alarm_queue;
+extern void ring_alarm(); //pops and calls alarms function
+extern int first_execution_tick(); // returns when_to_execute of first alarm
 
 /* register an alarm to go off in "delay" milliseconds.  Returns a handle to
  * the alarm.
