@@ -210,6 +210,10 @@ long get_clock_ticks(){
     return *clock_ticks;
 }
 
+int get_quantum(){
+    return clock_quantum;
+}
+
 void increment_clock_ticks(long *clock_ticks){
     if (*clock_ticks == LONG_MAX){
         *clock_ticks = 0;

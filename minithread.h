@@ -20,6 +20,12 @@
  extern long get_clock_ticks();
 
 /*
+ * clock quantum
+ */
+
+ extern int get_quantum();
+
+/*
  * struct minithread:
  *  This is the key data structure for the thread management package.
  *  You must define the thread control block as a struct minithread.
