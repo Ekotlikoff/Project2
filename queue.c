@@ -210,7 +210,7 @@ queue_delete(queue_t queue, void* item) {
   }
   if(queue->length == 0)
   {
-      return 0;
+      return -1;
   }
 
   if(queue->first==NULL)

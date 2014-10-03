@@ -227,8 +227,13 @@ void increment_clock_ticks(long *clock_ticks){
 void 
 clock_handler(void* arg)
 {
+    alarm_id this_alarm;
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
+    while (get_clock_ticks() == queue_first(alarm_queue)->when_to_execute){
+        this_alarm = queue_dequeue(alarm_queue);
+        this_alarm->alarm(this_alarm->arg);
+    }
     increment_clock_ticks(clock_ticks);
     set_interrupt_level(old_interrupt_level);
 
