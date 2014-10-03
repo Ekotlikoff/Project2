@@ -32,7 +32,7 @@
 #endif // true
 
 #ifndef clock_quantum
-#define clock_quantum MILLISECOND
+#define clock_quantum (SECOND/2)
 #endif
 
 long *clock_ticks;
@@ -228,18 +228,46 @@ void increment_clock_ticks(long *clock_ticks){
  * You have to call minithread_clock_init with this
  * function as parameter in minithread_system_initialize
  */
-void 
+void
 clock_handler(void* arg)
 {
+    minithread_t nextThread = NULL;
+    minithread_t temp = NULL;
     interrupt_level_t old_interrupt_level;
+
     old_interrupt_level = set_interrupt_level(DISABLED);
     while (get_clock_ticks() == first_execution_tick()){
-        printf("about to ring_alarm\n");
+        printf("About to ring_alarm\n");
         ring_alarm();
     }
     increment_clock_ticks(clock_ticks);
-    set_interrupt_level(old_interrupt_level);
 
+    queue_dequeue(readyQueue,(void**)&nextThread);
+    if(currentThread !=NULL && nextThread != NULL)
+    {
+        printf("SWAP %i for % i\n",currentThread->identifier,nextThread->identifier);
+        queue_append(readyQueue,currentThread);
+        temp = currentThread;
+        currentThread = nextThread;
+        minithread_switch(&(temp->stacktop),&(currentThread->stacktop));
+    }
+    else if(currentThread != NULL && nextThread == NULL)
+    {
+        printf("RETURN TO %i\n",minithread_id(currentThread));
+        minithread_switch(&(currentThread->stacktop),&(currentThread->stacktop));
+    }
+    else if(currentThread == NULL && nextThread != NULL)
+    {
+        printf("FIRST SCHEDULE\n");
+        currentThread = nextThread;
+        minithread_switch(&bogusPointer,&(currentThread->stacktop));
+    }
+    else
+    {
+        printf("This shouldn't happen\n");
+        //both are null THIS SHOULD NOT HAPPEN
+    }
+    set_interrupt_level(old_interrupt_level);
 }
 
 void
