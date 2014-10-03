@@ -32,10 +32,10 @@
 #endif // true
 
 #ifndef clock_quantum
-#define clock_quantum 3*SECOND
+#define clock_quantum MILLISECOND
 #endif
 
-long *clock_ticks = 0;
+long *clock_ticks;
 
 queue_t readyQueue = NULL;
 queue_t deadQueue = NULL;
@@ -215,7 +215,8 @@ void increment_clock_ticks(long *clock_ticks){
         *clock_ticks = 0;
         return;
     }
-    *clock_ticks++;
+    printf("Clock ticks: %ld \n",*clock_ticks);
+    *clock_ticks+=1;
 }
 
 /*
@@ -229,7 +230,6 @@ clock_handler(void* arg)
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
     increment_clock_ticks(clock_ticks);
-
     set_interrupt_level(old_interrupt_level);
 
 }
@@ -258,6 +258,8 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     minithread_fork(mainproc,mainarg);
     deletionThread = minithread_fork(cleanup,NULL);
     minithread_clock_init(clock_quantum,clock_handler);
+    clock_ticks = (long *)malloc(sizeof(long));
+    *clock_ticks = 0;
     set_interrupt_level(ENABLED);
     minithread_yield();
 }

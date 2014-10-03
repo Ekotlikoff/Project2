@@ -53,9 +53,8 @@ get(queue_t queue, int index){
 
 int
 queue_insert(queue_t queue, void* item, int index){
-  int counter = 0;
   node* previous;
-  node* new;
+  node* new = (node *)malloc(sizeof(node));
   if (index >= queue->length){
     printf("queue_insert error - index out of bounds\n");
     return -1;

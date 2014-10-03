@@ -6,6 +6,7 @@
 #include "synch.h"
 #include "queue.h"
 #include "minithread.h"
+#include "interrupts.h"
 
 /*
  * Semaphores.
