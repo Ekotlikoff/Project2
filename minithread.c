@@ -28,6 +28,10 @@
 #define true 1
 #endif // true
 
+#ifndef quanta
+#define quantum 3*SECOND
+#endif
+
 queue_t readyQueue = NULL;
 queue_t deadQueue = NULL;
 queue_t blockedList = NULL;
@@ -231,5 +235,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     deadQueue = queue_new();
     minithread_fork(mainproc,mainarg);
     deletionThread = minithread_fork(cleanup,NULL);
+    minithread_clock_init(quanta,clock_handler);
+    set_interrupt_level(ENABLED);
     minithread_yield();
 }
