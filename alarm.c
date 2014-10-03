@@ -5,11 +5,36 @@
 #include "minithread.h"
 #include "queue.h"
 
+
+typedef alarm alarm;
+struct alarm{
+	int id;
+	long when_to_execute;
+	alarm_handler_t alarm;
+	void *arg;
+}
+
+alarm_id alarm_queue;
+
+int running_id = 0;
+
+
+
 /* see alarm.h */
 alarm_id
 register_alarm(int delay, alarm_handler_t alarm, void *arg)
 {
-    return NULL;
+	alarm_id new = (alarm_id)malloc(sizeof(alarm));
+	if (alarm_queue == NULL){
+		alarm_queue = (alarm_id)queue_new();
+	}
+	new->id = running_id;
+	running_id++;
+	new->when_to_execute = get_clock_ticks() + delay;
+	new->alarm = alarm;
+	new->arg = arg;
+	alarm_queue
+    return new;
 }
 
 /* see alarm.h */

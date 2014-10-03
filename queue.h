@@ -17,6 +17,11 @@ typedef struct queue* queue_t;
 extern queue_t queue_new();
 
 /*
+ * inserts void * at certain index
+ */
+extern int queue_insert(queue_t, void *,int);
+
+/*
  * Return the val of the head of the list
  */
 extern void *queue_first(queue_t);

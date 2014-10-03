@@ -16,6 +16,9 @@
 
 #include <assert.h>
 
+#include <limits.h>
+#include <alarm.h>
+
 #ifndef NULL
 #define NULL 0
 #endif // NULL
@@ -28,9 +31,11 @@
 #define true 1
 #endif // true
 
-#ifndef quanta
-#define quantum 3*SECOND
+#ifndef clock_quantum
+#define clock_quantum 3*SECOND
 #endif
+
+long *clock_ticks = 0;
 
 queue_t readyQueue = NULL;
 queue_t deadQueue = NULL;
@@ -201,6 +206,18 @@ cleanup(arg_t args) {
     return 0;
 };
 
+long get_clock_ticks(){
+    return *clock_ticks;
+}
+
+void increment_clock_ticks(long *clock_ticks){
+    if (*clock_ticks == LONG_MAX){
+        *clock_ticks = 0;
+        return;
+    }
+    *clock_ticks++;
+}
+
 /*
  * This is the clock interrupt handling routine.
  * You have to call minithread_clock_init with this
@@ -209,6 +226,11 @@ cleanup(arg_t args) {
 void 
 clock_handler(void* arg)
 {
+    interrupt_level_t old_interrupt_level;
+    old_interrupt_level = set_interrupt_level(DISABLED);
+    increment_clock_ticks(clock_ticks);
+
+    set_interrupt_level(old_interrupt_level);
 
 }
 
@@ -235,7 +257,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     deadQueue = queue_new();
     minithread_fork(mainproc,mainarg);
     deletionThread = minithread_fork(cleanup,NULL);
-    minithread_clock_init(quanta,clock_handler);
+    minithread_clock_init(clock_quantum,clock_handler);
     set_interrupt_level(ENABLED);
     minithread_yield();
 }

@@ -40,6 +40,43 @@ queue_first(queue_t queue) {
   return queue->first->val;
 }
 
+node*
+get(queue_t queue, int index){
+  int counter;
+  node* temp = queue->first;
+
+  for (counter=0;counter<=index;counter++){
+    temp = temp->next;
+  }
+  return temp;
+}
+
+int
+queue_insert(queue_t queue, void* item, int index){
+  int counter = 0;
+  node* previous;
+  node* new;
+  if (index >= queue->length){
+    printf("queue_insert error - index out of bounds\n");
+    return -1;
+  }
+  if (queue == NULL){
+    return -1;
+  }
+  if (index == 0){
+    return queue_prepend(queue, item);
+  }
+  else if (index == queue->length){
+    return queue_append(queue, item);
+  }
+  previous = get(queue, index-1);
+  new->val = item;
+  new->next = previous->next;
+  previous->next = new;
+  queue->length++;
+  return 0;
+}
+
 /*
  * Prepend a void* to a queue (both specifed as parameters).  Return
  * 0 (success) or -1 (failure).

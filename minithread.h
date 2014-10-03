@@ -13,6 +13,11 @@
 
 #include "machineprimitives.h"
 
+/*
+ * clock ticks 
+ */
+
+ extern long get_clock_ticks();
 
 /*
  * struct minithread:
