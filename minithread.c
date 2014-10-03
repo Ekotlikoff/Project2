@@ -124,7 +124,6 @@ minithread_stop() {
     }
     else
     {
-	printf("Switching\n");
         currentThread = next;
         minithread_switch(&(temp->stacktop),&(currentThread->stacktop)); // SWITCH
     }
