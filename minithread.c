@@ -34,7 +34,7 @@ queue_t blockedList = NULL;
 
 minithread_t currentThread = NULL;
 minithread_t deletionThread = NULL;
-semaphore_t threads_to_delete = semaphore_create();
+semaphore_t threads_to_delete = NULL;
 stack_pointer_t bogusPointer;
 int lastID =0;
 
@@ -100,7 +100,7 @@ minithread_self() {
 
 int
 minithread_id() {
-    if(minithread_self != NULL)
+    if(minithread_self() != NULL)
     {
         return minithread_self()->identifier;
     }
@@ -116,14 +116,15 @@ minithread_stop() {
     minithread_t temp = minithread_self();
     queue_dequeue(readyQueue,(void**)&next);
     queue_append(blockedList,minithread_self());
-
     if(next == NULL)
     {
-        printf("Thread Stopped with no other availiable threads. Go Idle.");
+
+        printf("Thread Stopped with no other availiable threads. Go Idle.\n\r");
         while(1);
     }
     else
     {
+	printf("Switching\n");
         currentThread = next;
         minithread_switch(&(temp->stacktop),&(currentThread->stacktop)); // SWITCH
     }
@@ -190,7 +191,7 @@ cleanup(arg_t args) {
     minithread_t toDelete = NULL;
     while(1) {
         semaphore_P(threads_to_delete);
-        queue_dequeue(deadQueue,(void**)&toDelete;
+        queue_dequeue(deadQueue,(void**)&toDelete);
         minithread_free_stack(toDelete->stackbase);
         free(toDelete);
     }
@@ -227,6 +228,7 @@ void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     readyQueue = queue_new();
     blockedList = queue_new();
+    threads_to_delete = semaphore_create();
     deadQueue = queue_new();
     minithread_fork(mainproc,mainarg);
     deletionThread = minithread_fork(cleanup,NULL);
