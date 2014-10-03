@@ -1,10 +1,12 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <math.h>
 
 #include "interrupts.h"
 #include "alarm.h"
 #include "minithread.h"
 #include "queue.h"
+
 
 typedef struct alarm alarm;
 struct alarm{
@@ -62,12 +64,16 @@ func (void* element, void* arg){             //arg is tuple, fst is the to be in
 alarm_id
 register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 {
+	float millis_per_tick;
+	int ticks_to_wait;
 	void* item = (void *)malloc(sizeof(int));
 	alarm* new = (alarm *)malloc(sizeof(alarm));
 	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}
-	new->when_to_execute = get_clock_ticks() + delay;
+	millis_per_tick = (float)clock_quantum/(float)MILLISECOND;
+	ticks_to_wait = ceil((float) delay / millis_per_tick);
+	new->when_to_execute = get_clock_ticks() + ticks_to_wait;
 	new->alarm = alarm_f;
 	new->arg = arg;
 	queue_iterate(alarm_queue,func,item);

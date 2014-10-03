@@ -245,8 +245,12 @@ f(void* arg){  // helper function for minithread_sleep_with_timeout
 
 void
 minithread_sleep_with_timeout(int delay){
-  register_alarm(delay,f,(void *)minithread_self());
-  minithread_stop();
+    interrupt_level_t old_interrupt_level;
+    old_interrupt_level = set_interrupt_level(DISABLED);
+    register_alarm(delay,f,(void *)minithread_self());    //TODO so that start can't happen before stop, does this make sense?
+    minithread_stop();
+    set_interrupt_level(old_interrupt_level);
+
 }
 
 /*
