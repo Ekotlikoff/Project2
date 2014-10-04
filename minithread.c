@@ -12,6 +12,7 @@
 #include "interrupts.h"
 #include "minithread.h"
 #include "queue.h"
+#include "multilevel_queue.h"
 #include "synch.h"
 
 #include <assert.h>
@@ -32,12 +33,12 @@
 #endif // true
 
 #ifndef clock_quantum
-#define clock_quantum (SECOND/2)
+#define clock_quantum (SECOND/10)
 #endif
 
 long *clock_ticks;
 
-queue_t readyQueue = NULL;
+multilevel_queue_t readyQueue = NULL;
 queue_t deadQueue = NULL;
 queue_t blockedList = NULL;
 
@@ -45,7 +46,11 @@ minithread_t currentThread = NULL;
 minithread_t deletionThread = NULL;
 semaphore_t threads_to_delete = NULL;
 stack_pointer_t bogusPointer;
-int lastID =0;
+
+int lastID = 0;
+
+int starveCounter = 0;
+int yieldFlag = 0; // 1 if the last thread yielded 0 otherwise
 
 /*
  * A minithread should be defined either in this file or in a private
@@ -64,8 +69,46 @@ struct minithread {
   arg_t final_arg;
   int identifier;
   int isDead; // 0 ALIVE, anything else DEAD
+  int ticksToDeschedule;
+  int queueLevel;
 };
 
+minithread_t getNextThread()
+{
+    minithread_t next;
+    multilevel_queue_dequeue(readyQueue,0,(void**)&next);
+    return next;
+}
+minithread_t getNextThreadWeighted()
+{
+    minithread_t next;
+    //FIRST GO 0 to 3
+    if(starveCounter%2==0) //get level 0 50% of the time
+    {
+        multilevel_queue_dequeue(readyQueue,0,(void**)&next);
+        return next;
+    }
+    else if( (starveCounter-1)%4 == 0) // get level 1 25%
+    {
+        multilevel_queue_dequeue(readyQueue,1,(void**)&next);
+        return next;
+    }
+    else if(starveCounter ==3 || starveCounter == 11 || starveCounter == 19) // level 2 15%
+    {
+        multilevel_queue_dequeue(readyQueue,2,(void**)&next);
+        return next;
+    }
+    else if(starveCounter ==7 || starveCounter == 15 ) //level 3 10%
+    {
+        multilevel_queue_dequeue(readyQueue,3,(void**)&next);
+        return next;
+    }
+    else
+    {
+        printf("ERROR ON NEXT THREAD THIS SHOULD NEVER OCCUR \n");
+        return NULL;
+    }
+}
 /*
 * This marks the currently  running thread as dead and then yields.
 */
@@ -85,7 +128,7 @@ minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
     minithread_t newThread;
     newThread = minithread_create(proc,arg);
-    queue_append(readyQueue,newThread);
+    multilevel_queue_enqueue(readyQueue,0,newThread);
     return newThread;
 }
 
@@ -98,6 +141,8 @@ minithread_create(proc_t proc, arg_t arg) {
     minithread_initialize_stack(&(newThread->stacktop),proc,arg,minithread_mark_dead,NULL);
     newThread->identifier = lastID;
     newThread->isDead = false;
+    newThread->ticksToDeschedule = 1;
+    newThread->queueLevel = 0;
     lastID++;
     return newThread;
 }
@@ -123,7 +168,7 @@ void
 minithread_stop() {
     minithread_t next = NULL;
     minithread_t temp = minithread_self();
-    queue_dequeue(readyQueue,(void**)&next);
+    next = getNextThread();
     queue_append(blockedList,minithread_self());
     if(next == NULL)
     {
@@ -142,22 +187,22 @@ minithread_stop() {
 void
 minithread_start(minithread_t t) {
     queue_delete(blockedList,t);
-    queue_append(readyQueue,t);
+    multilevel_queue_enqueue(readyQueue,t->queueLevel,t);
 }
 
 void
 minithread_yield() {
     minithread_t nextThread = NULL;
     minithread_t temp = NULL;
-    queue_dequeue(readyQueue,(void**)&nextThread);
-
+    nextThread = getNextThread();
+    yieldFlag = 1;
     if(currentThread != NULL)
     {
         if(nextThread!=NULL)
         {
             if(!(currentThread->isDead))
             {
-                queue_append(readyQueue,currentThread);
+                multilevel_queue_enqueue(readyQueue,currentThread->queueLevel,currentThread);
             }
             temp = currentThread;
             currentThread = nextThread;
@@ -219,7 +264,7 @@ void increment_clock_ticks(long *clock_ticks){
         *clock_ticks = 0;
         return;
     }
-    printf("Clock ticks: %ld \n",*clock_ticks);
+    //printf("Clock ticks: %ld \n",*clock_ticks);
     *clock_ticks+=1;
 }
 
@@ -237,35 +282,65 @@ clock_handler(void* arg)
 
     old_interrupt_level = set_interrupt_level(DISABLED);
     while (get_clock_ticks() == first_execution_tick()){
-        printf("About to ring_alarm\n");
+        //printf("About to ring_alarm\n");
         ring_alarm();
     }
     increment_clock_ticks(clock_ticks);
-
-    queue_dequeue(readyQueue,(void**)&nextThread);
-    if(currentThread !=NULL && nextThread != NULL)
+    if(currentThread)
     {
-        printf("SWAP %i for % i\n",currentThread->identifier,nextThread->identifier);
-        queue_append(readyQueue,currentThread);
-        temp = currentThread;
-        currentThread = nextThread;
-        minithread_switch(&(temp->stacktop),&(currentThread->stacktop));
-    }
-    else if(currentThread != NULL && nextThread == NULL)
-    {
-        printf("RETURN TO %i\n",minithread_id(currentThread));
-        minithread_switch(&(currentThread->stacktop),&(currentThread->stacktop));
-    }
-    else if(currentThread == NULL && nextThread != NULL)
-    {
-        printf("FIRST SCHEDULE\n");
-        currentThread = nextThread;
-        minithread_switch(&bogusPointer,&(currentThread->stacktop));
+        if(yieldFlag == 0 )
+        {
+            currentThread->ticksToDeschedule--;
+        }
+        else
+        {
+            yieldFlag = 0;
+        }
+        if(currentThread->ticksToDeschedule == 0)
+        {
+            currentThread->queueLevel++;
+            if(currentThread->queueLevel>3)
+            {
+                currentThread->queueLevel=3;
+            }
+            currentThread->ticksToDeschedule = 1<< currentThread->queueLevel;
+            nextThread = getNextThreadWeighted();
+            starveCounter++;
+            starveCounter = starveCounter %20;
+            if(nextThread != NULL)
+            {
+                //printf("SWAP %i for % i\n",currentThread->identifier,nextThread->identifier);
+                multilevel_queue_enqueue(readyQueue,currentThread->queueLevel,currentThread);
+                temp = currentThread;
+                currentThread = nextThread;
+                minithread_switch(&(temp->stacktop),&(currentThread->stacktop));
+            }
+            else
+            {
+                //printf("RETURN TO %i\n",minithread_id(currentThread));
+                minithread_switch(&(currentThread->stacktop),&(currentThread->stacktop));
+            }
+        }
+        else
+        {
+            //printf("Continue %i. %i ticks remain.\n",minithread_id(currentThread),currentThread->ticksToDeschedule);
+            minithread_switch(&(currentThread->stacktop),&(currentThread->stacktop));
+        }
     }
     else
     {
-        printf("This shouldn't happen\n");
-        //both are null THIS SHOULD NOT HAPPEN
+        nextThread = getNextThread();
+        if(nextThread != NULL)
+        {
+            //printf("FIRST SCHEDULE\n");
+            currentThread = nextThread;
+            minithread_switch(&bogusPointer,&(currentThread->stacktop));
+        }
+        else
+        {
+            printf("This shouldn't happen\n");
+            //both are null THIS SHOULD NOT HAPPEN
+        }
     }
     set_interrupt_level(old_interrupt_level);
 }
@@ -302,7 +377,7 @@ minithread_sleep_with_timeout(int delay){
 
 void
 minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
-    readyQueue = queue_new();
+    readyQueue = multilevel_queue_new(4);
     blockedList = queue_new();
     threads_to_delete = semaphore_create();
     deadQueue = queue_new();

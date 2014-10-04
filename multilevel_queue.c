@@ -18,9 +18,14 @@ struct multilevel_queue {
  */
 multilevel_queue_t multilevel_queue_new(int number_of_levels)
 {
-	int counter = 0;        // for-loop counter
+    int counter = 0;        // for-loop counter
+    multilevel_queue_t new;
+    if(number_of_levels == 0)
+    {
+        return NULL;
+    }
 
-	multilevel_queue_t new = (multilevel_queue_t)malloc(sizeof(struct multilevel_queue));
+	new = (multilevel_queue_t)malloc(sizeof(struct multilevel_queue));
 	new->number_of_levels  = number_of_levels;
 	new->tot_length        = 0;
 	new->levels  	       = (queue_t*)malloc(new->number_of_levels * sizeof(queue_t));
@@ -75,7 +80,7 @@ int multilevel_queue_dequeue(multilevel_queue_t queue, int level, void** item)
 	if (level_out_of_range(queue, level)){
 		return -1;
 	}
-	for (;counter<queue->number_of_levels;counter++){
+	for (counter = 0;counter<queue->number_of_levels;counter++){
 		if (queue_length(queue->levels[level]) > 0) {
 			if (queue_dequeue(queue->levels[level], item) == -1){
 				printf("Dequeue failure\n");

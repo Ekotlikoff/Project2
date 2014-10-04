@@ -10,7 +10,7 @@ default: all
 #    necessary PortOS code.
 #
 # this would be a good place to add your tests
-all: test1 test2 test3 buffer sieve shop test4
+all: test1 test2 test3 buffer sieve shop test4 test_yield_preempt
 
 # running "make clean" will remove all files ignored by git.  To ignore more
 # files, you should add them to the file .gitignore
@@ -34,7 +34,8 @@ OBJ =                              \
     random.o                       \
     alarm.o                        \
     queue.o                        \
-    synch.o
+    synch.o                        \
+    multilevel_queue.o
 
 %: %.o start.o end.o $(OBJ) $(SYSTEMOBJ)
 	$(CC) $(LIB) -o $@ start.o $(filter-out start.o end.o $(SYSTEMOBJ), $^) end.o $(SYSTEMOBJ) $(LFLAGS)
