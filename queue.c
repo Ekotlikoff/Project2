@@ -29,6 +29,10 @@ struct queue{
 queue_t
 queue_new() {
   queue_t new = malloc (sizeof(struct queue));
+  if(!new)
+  {
+    return NULL;
+  }
   new->length = 0;
   new->first = NULL;
   new->last = NULL;
@@ -58,6 +62,10 @@ int
 queue_insert(queue_t queue, void* item, int index){
   node* previous;
   node* new = (node *)malloc(sizeof(node));
+  if(!queue)
+  {
+        return -1;
+  }
   if (index >= queue->length){
     printf("queue_insert error - index out of bounds\n");
     return -1;
@@ -86,6 +94,10 @@ queue_insert(queue_t queue, void* item, int index){
 int
 queue_prepend(queue_t queue, void* item) {
   node* new = (node *)malloc(sizeof(node));
+  if(!new || !queue)
+  {
+    return -1;
+  }
   new->val = item;
   new->next = queue->first;
   queue->first = new;
@@ -105,6 +117,10 @@ queue_prepend(queue_t queue, void* item) {
 int
 queue_append(queue_t queue, void* item) {
   node* new = (node *)malloc(sizeof(node));
+  if(!new || !queue)
+  {
+    return -1;
+  }
   new->val=item;
   new->next=NULL;
   if (queue->length == 0){
@@ -128,7 +144,10 @@ queue_append(queue_t queue, void* item) {
 int
 queue_dequeue(queue_t queue, void** item) {
   node* temp;
-
+  if(!queue)
+  {
+    return -1;
+  }
   *item = NULL;
   if (queue->length == 0){
     *item = NULL;
@@ -151,11 +170,12 @@ queue_dequeue(queue_t queue, void** item) {
 int
 queue_iterate(queue_t queue, func_t f, void* item) {
   int counter;
-  node* temp = queue->first;
+  node* temp;
 
   if (queue == NULL || f == NULL) {
     return -1;
   }
+  temp = queue->first;
   for (counter=0;counter<queue->length;counter++){
     f (temp->val,item);
     temp = temp->next;
@@ -170,18 +190,20 @@ queue_iterate(queue_t queue, func_t f, void* item) {
 int
 queue_free (queue_t queue) {
   int counter;
-  node* temp1 = queue->first;
+  node* temp1;
   node* temp2;
 
   if (queue == NULL){
     return -1;
   }
+  temp1 = queue->first;
   for (counter=0;counter<queue->length;counter++){
     temp2 = temp1->next;
     free(temp1);
     temp1 = temp2;
   }
   free (queue);
+  queue = NULL;
   return 0;
 }
 

@@ -14,11 +14,11 @@
 #include "queue.h"
 #include "multilevel_queue.h"
 #include "synch.h"
+#include "alarm.h"
 
 #include <assert.h>
 
 #include <limits.h>
-#include <alarm.h>
 
 #ifndef NULL
 #define NULL 0
@@ -76,38 +76,31 @@ struct minithread {
 minithread_t getNextThread()
 {
     minithread_t next;
-    multilevel_queue_dequeue(readyQueue,0,(void**)&next);
-    return next;
-}
-minithread_t getNextThreadWeighted()
-{
-    minithread_t next;
     //FIRST GO 0 to 3
     if(starveCounter%2==0) //get level 0 50% of the time
     {
         multilevel_queue_dequeue(readyQueue,0,(void**)&next);
-        return next;
     }
     else if( (starveCounter-1)%4 == 0) // get level 1 25%
     {
         multilevel_queue_dequeue(readyQueue,1,(void**)&next);
-        return next;
     }
     else if(starveCounter ==3 || starveCounter == 11 || starveCounter == 19) // level 2 15%
     {
         multilevel_queue_dequeue(readyQueue,2,(void**)&next);
-        return next;
     }
     else if(starveCounter ==7 || starveCounter == 15 ) //level 3 10%
     {
         multilevel_queue_dequeue(readyQueue,3,(void**)&next);
-        return next;
     }
     else
     {
         printf("ERROR ON NEXT THREAD THIS SHOULD NEVER OCCUR \n");
         return NULL;
     }
+    starveCounter++;
+    starveCounter = starveCounter%20;
+    return next;
 }
 /*
 * This marks the currently  running thread as dead and then yields.
@@ -137,6 +130,10 @@ minithread_create(proc_t proc, arg_t arg) {
     minithread_t newThread;
     //printf("Creating Thread.\n");
     newThread = (minithread_t)malloc(sizeof(struct minithread));
+    if(!newThread)
+    {
+        return NULL;
+    }
     minithread_allocate_stack(&(newThread->stackbase),&(newThread->stacktop));
     minithread_initialize_stack(&(newThread->stacktop),proc,arg,minithread_mark_dead,NULL);
     newThread->identifier = lastID;
@@ -304,9 +301,7 @@ clock_handler(void* arg)
                 currentThread->queueLevel=3;
             }
             currentThread->ticksToDeschedule = 1<< currentThread->queueLevel;
-            nextThread = getNextThreadWeighted();
-            starveCounter++;
-            starveCounter = starveCounter %20;
+            nextThread = getNextThread();
             if(nextThread != NULL)
             {
                 //printf("SWAP %i for % i\n",currentThread->identifier,nextThread->identifier);

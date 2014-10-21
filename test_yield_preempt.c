@@ -45,12 +45,21 @@ thread3(int* arg) {
     return 0;
 }
 int
+thread4(int* arg) {
+    while(1){
+        printf("T4\n");
+        minithread_yield();
+    }
+    return 0;
+}
+int
 thread0(int* arg) {
     int count = 0;
     printf("T0\n");
     minithread_fork(thread1,NULL);
     minithread_fork(thread2,NULL);
     minithread_fork(thread3,NULL);
+    minithread_fork(thread4,NULL);
     while(1){
         count++;
         if(count >= 50000000) {

@@ -37,7 +37,7 @@ multilevel_queue_t multilevel_queue_new(int number_of_levels)
 
 int level_out_of_range(multilevel_queue_t queue, int level){
 	if (queue->number_of_levels <= level){
-		printf("Level out of range, dequeue failed\n");
+		//printf("Level out of range, dequeue failed\n");
 		return 1;
 	}
 	return 0;
@@ -83,15 +83,15 @@ int multilevel_queue_dequeue(multilevel_queue_t queue, int level, void** item)
 	for (counter = 0;counter<queue->number_of_levels;counter++){
 		if (queue_length(queue->levels[level]) > 0) {
 			if (queue_dequeue(queue->levels[level], item) == -1){
-				printf("Dequeue failure\n");
+				//printf("Dequeue failure\n");
 				return -1;
 			}
 			queue->tot_length--;
 			return level;
 		}
-		level = increment_level(queue,counter);    //TODO will this change level in the next loop?
+		level = increment_level(queue,level);    //TODO will this change level in the next loop?
 	}
-	printf("Queue was empty when it shouldn't have been\n");
+	//printf("Queue was empty when it shouldn't have been\n");
 	return  -1;
 }
 
