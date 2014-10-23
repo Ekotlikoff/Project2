@@ -7,5 +7,5 @@ sieve
 shop
 .depend
 *.o
-
 *.swp
+.DS_Store
