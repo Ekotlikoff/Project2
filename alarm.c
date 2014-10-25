@@ -33,14 +33,12 @@ ring_alarm(){
         return;
     }
     this_alarm->alarm(this_alarm->arg);
+    free(this_alarm);
 }
 
 int
 first_execution_tick(){    //returns -1 if no alarms
     alarm* this_alarm = NULL;
-    if (alarm_queue == NULL){
-		alarm_queue = (alarm_id)queue_new();
-	}   
     this_alarm = queue_first(alarm_queue);
     if (this_alarm == NULL){
         return -1;
@@ -71,6 +69,8 @@ ceiling(double x){
 alarm_id
 register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 {
+	interrupt_level_t old_interrupt_level;
+    old_interrupt_level = set_interrupt_level(DISABLED);
 	double millis_per_tick;
 	int ticks_to_wait;
 	void* item = (void *)malloc(sizeof(int));
@@ -85,6 +85,7 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 	new->arg = arg;
 	queue_iterate(alarm_queue,func,item);
 	queue_insert(alarm_queue,(void *)new,*(int*)item);
+	set_interrupt_level(old_interrupt_level);
     return new;
 }
 
@@ -92,12 +93,17 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 int
 deregister_alarm(alarm_id alarm)
 {
+	interrupt_level_t old_interrupt_level;
+    old_interrupt_level = set_interrupt_level(DISABLED);
     if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}
     if (queue_delete(alarm_queue, alarm) == -1){  // nothing deleted
+    	set_interrupt_level(old_interrupt_level);
 		return 1;   
     }
+    free(alarm);
+    set_interrupt_level(old_interrupt_level);
     return 0;
 }
 

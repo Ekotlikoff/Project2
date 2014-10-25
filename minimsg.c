@@ -3,16 +3,33 @@
  */
 #include "minimsg.h"
 
+#define BOUND 0
+#define UNBOUND 1
+#define NULL 0
+
 struct miniport
 {
-    int dummy; /* you should erase this field and replace it with your definition */
+	int type;          			//BOUND or UNBOUND
+	int port_number;
+	union destaddr_or_sema {
+		network_address_t dest; //BOUND
+    	semaphore_t sema; 	    //semaphore for blocking on minimsg_receive (handle_network_interrupt V's)
+	}
+	union destport_or_packets {
+		int dest_port;   	    //BOUND
+		queue_t packets;   		//UNBOUND
+	}
 };
+
+miniport_t unbound_ports;
+int* current_bound = &0;
 
 /* performs any required initialization of the minimsg layer.
  */
 void
 minimsg_initialize()
 {
+	unbound_ports = (miniport_t)calloc(sizeof(miniport)*32768); //Calloc because comparing unbound_ports to NULL, make sense?
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
@@ -25,7 +42,18 @@ minimsg_initialize()
 miniport_t
 miniport_create_unbound(int port_number)
 {
-    return 0;
+    miniport_t this_port;
+	if (unbound_ports[port_number] == NULL) {
+		this_port            				   = (miniport_t)malloc(sizeof(miniport));
+		this_port<-type        				   = UNBOUND;
+		this_port<-port_number 				   = port_number;
+    	this_port<-destaddr_or_sema.sema 	   = semaphore_create();
+    	this_port<-destport_or_packets.packets = queue_new();
+	}
+	else {
+		this_port = unbound_ports[port_number];
+	}
+	return this_port;
 }
 
 /* Creates a bound port for use in sending packets. The two parameters, addr and
@@ -38,8 +66,14 @@ miniport_create_unbound(int port_number)
  */
 miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
-{
-    return 0;
+{		
+	miniport_t this_port 					 = (miniport_t)malloc(sizeof(miniport));
+	this_port<-type 						 = BOUND;
+	this_port<-port_number 					 = *current_bound;
+	this_port<-destaddr_or_sema.dest 		 = addr;
+	this_port<-destport_or_packets.dest_port = remote_unbound_port_number;
+	current_bound++;
+    return this_port;
 }
 
 /* Destroys a miniport and frees up its resources. If the miniport was in use at
@@ -48,6 +82,10 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 void
 miniport_destroy(miniport_t miniport)
 {
+	if (miniport<-type == UNBOUND) {
+		semaphore_destroy(miniport<-destaddr_or_sema.sema);
+		queue_free(miniport<-destport_or_packets.packets);
+	}
 }
 
 /* Sends a message through a locally bound port (the bound port already has an associated

@@ -342,17 +342,21 @@ clock_handler(void* arg)
 
 void
 f(void* arg){  // helper function for minithread_sleep_with_timeout
-  minithread_start((minithread_t) arg);
+  semaphore_V((semaphore_t) arg);
 }
 
 void
 minithread_sleep_with_timeout(int delay){
-    interrupt_level_t old_interrupt_level;
-    old_interrupt_level = set_interrupt_level(DISABLED);
-    register_alarm(delay,f,(void *)minithread_self());    //TODO so that start can't happen before stop, does this make sense?
-    minithread_stop();
-    set_interrupt_level(old_interrupt_level);
+    semaphore_t signal = semaphore_create();
+    register_alarm(delay,f,(void *)signal); 
+    semaphore_P(signal);
+    semaphore_destroy(signal);
+}
 
+void
+network_handler(network_interrupt_arg_t* packet){
+    //process packet
+    //free packet
 }
 
 /*
@@ -379,6 +383,7 @@ minithread_system_initialize(proc_t mainproc, arg_t mainarg) {
     minithread_fork(mainproc,mainarg);
     deletionThread = minithread_fork(cleanup,NULL);
     minithread_clock_init(clock_quantum,clock_handler);
+    network_initialize(network_handler); // TODO is this the right place for this?
     clock_ticks = (long *)malloc(sizeof(long));
     *clock_ticks = 0;
     set_interrupt_level(ENABLED);
