@@ -83,7 +83,7 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
     this_port    		                 = (miniport_t)malloc(sizeof(miniport));
     this_port->type		                 = BOUND;
     this_port->port_number 	    		 = *current_bound;
-    this_port->destaddr_or_sema.dest 		 = addr; //not sure why
+    network_address_copy(addr,this_port->destaddr_or_sema.dest);
     this_port->destport_or_packets.dest_port     = remote_unbound_port_number;
     current_bound++;
     return this_port;
@@ -113,6 +113,9 @@ miniport_destroy(miniport_t miniport)
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
 {
+    //create header (miniheader.h has type def)
+    //pack header
+    //network_send_pkt()
     return 0;
 }
 
@@ -126,6 +129,12 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
  */
 int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_port, minimsg_t msg, int *len)
 {
+    //p on the sema
+    //pop off the queue
+    //unpack header
+    //create new local bound_port
+    //return port,len, and header
+    //return number of data payload bytes recieved not invlusive of header
     return 0;
 }
 
