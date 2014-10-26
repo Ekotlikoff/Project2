@@ -12,6 +12,9 @@
 #ifndef NULL
 #define NULL 0
 #endif
+#define bound_lowerbound 32768
+#define bound_upperbound 65536
+#define num_unbound 32768
 
 typedef struct miniport
 {
@@ -33,12 +36,12 @@ typedef struct miniport
 miniport_t* unbound_ports;
 int* current_bound;
 
-/* performs any required initialization o;wqq;;qwf the minimsg layer.
+/* performs any required initialization of the minimsg layer.
  */
 void
 minimsg_initialize()
 {
-	unbound_ports = (miniport_t*)calloc(32768,sizeof(miniport_t)); //Calloc because comparing unbound_ports to NULL, make sense?
+	unbound_ports = (miniport_t*)calloc(num_unbound,sizeof(miniport_t)); //Calloc because comparing unbound_ports to NULL, make sense?
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
@@ -79,10 +82,10 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
     miniport_t this_port; 
     if (current_bound == NULL){
         current_bound = (int*)malloc(sizeof(int));
-        *current_bound = 32768;
+        *current_bound = bound_lowerbound;
     }
-    else if (*current_bound == 65536) { //so max val is 65535
-        *current_bound = 32768;
+    else if (*current_bound == bound_upperbound) { //so max val is 65535
+        *current_bound = bound_lowerbound;
     }
     this_port    		                 = (miniport_t)malloc(sizeof(miniport));
     this_port->type		                 = BOUND;
