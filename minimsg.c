@@ -131,7 +131,7 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
 {
     //p on the sema
     //pop off the queue
-    //unpack header
+    //unpack header unless this should be done in interrupt handler?
     //create new local bound_port
     //return port,len, and header
     //return number of data payload bytes recieved not invlusive of header

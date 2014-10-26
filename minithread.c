@@ -16,6 +16,7 @@
 #include "synch.h"
 #include "alarm.h"
 #include "network.h"
+#include "miniheader.h"
 
 #include <assert.h>
 
@@ -356,9 +357,13 @@ minithread_sleep_with_timeout(int delay){
 
 void
 network_handler(network_interrupt_arg_t* packet){
-    return;
+    mini_header_t header; 
+    header = (mini_header_t)&packet->buffer; //trying to get the header off the front end, this right?
+    //is the destination_port the port_number or the port itself?
+    //unpacking should probably be done here as opposed to minimsg_receive
     //process packet
     //free packet
+    return;
 }
 
 /*
