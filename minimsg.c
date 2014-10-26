@@ -1,35 +1,40 @@
 /*
  *  Implementation of minimsgs and miniports.
  */
+#include <stdlib.h>
 #include "minimsg.h"
+#include "synch.h"
+#include "queue.h"
 
 #define BOUND 0
 #define UNBOUND 1
+#ifndef NULL
 #define NULL 0
+#endif
 
-struct miniport
+typedef struct miniport
 {
-	int type;          			//BOUND or UNBOUND
+	int type;          		//BOUND or UNBOUND
 	int port_number;
-	union destaddr_or_sema {
-		network_address_t dest; //BOUND
-    	semaphore_t sema; 	    //semaphore for blocking on minimsg_receive (handle_network_interrupt V's)
-	}
-	union destport_or_packets {
-		int dest_port;   	    //BOUND
-		queue_t packets;   		//UNBOUND
-	}
-};
+	union {
+	    network_address_t dest;     //BOUND
+    	    semaphore_t sema; 	        //semaphore for blocking on minimsg_receive (handle_network_interrupt V's)
+	} destaddr_or_sema;
+	union {
+	    int dest_port;   	        //BOUND
+	    queue_t packets;   		//UNBOUND
+	} destport_or_packets;
+} miniport;
 
-miniport_t unbound_ports;
-int* current_bound = &0;
+miniport_t* unbound_ports;
+int* current_bound;
 
-/* performs any required initialization of the minimsg layer.
+/* performs any required initialization o;wqq;;qwf the minimsg layer.
  */
 void
 minimsg_initialize()
 {
-	unbound_ports = (miniport_t)calloc(sizeof(miniport)*32768); //Calloc because comparing unbound_ports to NULL, make sense?
+	unbound_ports = (miniport_t*)calloc(32768,sizeof(miniport_t)); //Calloc because comparing unbound_ports to NULL, make sense?
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
@@ -43,17 +48,17 @@ miniport_t
 miniport_create_unbound(int port_number)
 {
     miniport_t this_port;
-	if (unbound_ports[port_number] == NULL) {
-		this_port            				   = (miniport_t)malloc(sizeof(miniport));
-		this_port<-type        				   = UNBOUND;
-		this_port<-port_number 				   = port_number;
-    	this_port<-destaddr_or_sema.sema 	   = semaphore_create();
-    	this_port<-destport_or_packets.packets = queue_new();
-	}
-	else {
-		this_port = unbound_ports[port_number];
-	}
-	return this_port;
+    if (unbound_ports[port_number] == NULL) {
+	this_port       		       = (miniport_t)malloc(sizeof(miniport));
+	this_port->type   		       = UNBOUND;
+	this_port->port_number 		       = port_number;
+    	this_port->destaddr_or_sema.sema       = semaphore_create();
+    	this_port->destport_or_packets.packets = queue_new();
+    }
+    else {
+	this_port = unbound_ports[port_number];
+    }
+    return this_port;
 }
 
 /* Creates a bound port for use in sending packets. The two parameters, addr and
@@ -66,13 +71,21 @@ miniport_create_unbound(int port_number)
  */
 miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
-{		
-	miniport_t this_port 					 = (miniport_t)malloc(sizeof(miniport));
-	this_port<-type 						 = BOUND;
-	this_port<-port_number 					 = *current_bound;
-	this_port<-destaddr_or_sema.dest 		 = addr;
-	this_port<-destport_or_packets.dest_port = remote_unbound_port_number;
-	current_bound++;
+{
+    miniport_t this_port; 
+    if (current_bound == NULL){
+        current_bound = (int*)malloc(sizeof(int));
+        *current_bound = 32768;
+    }
+    else if (*current_bound == 65536) { //so max val is 65535
+        *current_bound = 32768;
+    }
+    this_port    		                 = (miniport_t)malloc(sizeof(miniport));
+    this_port->type		                 = BOUND;
+    this_port->port_number 	    		 = *current_bound;
+    this_port->destaddr_or_sema.dest 		 = addr; //not sure why
+    this_port->destport_or_packets.dest_port     = remote_unbound_port_number;
+    current_bound++;
     return this_port;
 }
 
@@ -82,9 +95,9 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 void
 miniport_destroy(miniport_t miniport)
 {
-	if (miniport<-type == UNBOUND) {
-		semaphore_destroy(miniport<-destaddr_or_sema.sema);
-		queue_free(miniport<-destport_or_packets.packets);
+	if (miniport->type == UNBOUND) {
+		semaphore_destroy(miniport->destaddr_or_sema.sema);
+		queue_free(miniport->destport_or_packets.packets);
 	}
 }
 

@@ -15,6 +15,7 @@
 #include "multilevel_queue.h"
 #include "synch.h"
 #include "alarm.h"
+#include "network.h"
 
 #include <assert.h>
 
@@ -355,6 +356,7 @@ minithread_sleep_with_timeout(int delay){
 
 void
 network_handler(network_interrupt_arg_t* packet){
+    return;
     //process packet
     //free packet
 }

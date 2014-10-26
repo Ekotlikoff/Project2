@@ -69,12 +69,14 @@ ceiling(double x){
 alarm_id
 register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 {
-	interrupt_level_t old_interrupt_level;
-    old_interrupt_level = set_interrupt_level(DISABLED);
-	double millis_per_tick;
+    double millis_per_tick;
 	int ticks_to_wait;
-	void* item = (void *)malloc(sizeof(int));
-	alarm* new = (alarm *)malloc(sizeof(alarm));
+	void* item;
+    alarm* new;
+    interrupt_level_t old_interrupt_level;
+    old_interrupt_level = set_interrupt_level(DISABLED);
+    item = (void *)malloc(sizeof(int));
+	new = (alarm *)malloc(sizeof(alarm));
 	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}
