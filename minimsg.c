@@ -2,6 +2,7 @@
  *  Implementation of minimsgs and miniports.
  */
 #include <stdlib.h>
+#include <stdio.h>
 #include "minimsg.h"
 #include "miniheader.h"
 #include "synch.h"
@@ -14,7 +15,6 @@
 #endif
 #define bound_lowerbound 32768
 #define bound_upperbound 65536
-#define num_unbound 32768
 
 typedef struct miniport
 {
@@ -33,7 +33,7 @@ typedef struct miniport
 	};
 } miniport;
 
-miniport_t* unbound_ports;
+miniport_t* ports;
 int* current_bound;
 
 /* performs any required initialization of the minimsg layer.
@@ -41,7 +41,7 @@ int* current_bound;
 void
 minimsg_initialize()
 {
-	unbound_ports = (miniport_t*)calloc(num_unbound,sizeof(miniport_t)); //Calloc because comparing unbound_ports to NULL, make sense?
+	ports = (miniport_t*)calloc(bound_upperbound,sizeof(miniport_t));
 }
 
 /* Creates an unbound port for listening. Multiple requests to create the same
@@ -55,7 +55,10 @@ miniport_t
 miniport_create_unbound(int port_number)
 {
     miniport_t this_port;
-    if (unbound_ports[port_number] == NULL) {
+    if (port_number >= bound_lowerbound){
+        printf("invalid unbound port_number\n");
+    }
+    if (ports[port_number] == NULL) {
 	this_port       		       = (miniport_t)malloc(sizeof(miniport));
 	this_port->type   		       = UNBOUND;
 	this_port->port_number 		       = port_number;
@@ -63,9 +66,20 @@ miniport_create_unbound(int port_number)
     	this_port->unbound.incoming_packets            = queue_new();
     }
     else {
-	this_port = unbound_ports[port_number];
+	this_port = ports[port_number];
     }
     return this_port;
+}
+
+//returns next available bound number, -1 if none
+int find_next_bound_num() {
+    int counter = bound_lowerbound;
+    for (;counter<bound_upperbound;counter++){
+        if (ports[counter] == NULL){
+            return counter;
+        }
+    }
+    return -1;
 }
 
 /* Creates a bound port for use in sending packets. The two parameters, addr and
@@ -80,19 +94,23 @@ miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 {
     miniport_t this_port; 
+    int this_port_number;
     if (current_bound == NULL){
         current_bound = (int*)malloc(sizeof(int));
         *current_bound = bound_lowerbound;
     }
-    else if (*current_bound == bound_upperbound) { //so max val is 65535
-        *current_bound = bound_lowerbound;
+    if (*current_bound >= bound_upperbound) { //so max val is 65535
+        this_port_number = find_next_bound_num();
+    }
+    else {
+        this_port_number = *current_bound;
+        current_bound++;
     }
     this_port    		                 = (miniport_t)malloc(sizeof(miniport));
     this_port->type		                 = BOUND;
-    this_port->port_number 	    		 = *current_bound;
+    this_port->port_number 	    		 = this_port_number;
     network_address_copy(addr,this_port->bound.remote_address);
     this_port->bound.remote_unbound_port               = remote_unbound_port_number;
-    current_bound++;
     return this_port;
 }
 
@@ -106,6 +124,7 @@ miniport_destroy(miniport_t miniport)
 		semaphore_destroy(miniport->unbound.data_ready);
 		queue_free(miniport->unbound.incoming_packets);
 	}
+        ports[miniport->port_number] = NULL;
 }
 
 /* Sends a message through a locally bound port (the bound port already has an associated
@@ -120,7 +139,7 @@ miniport_destroy(miniport_t miniport)
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
 {
-    mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header));
+    mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header)); 
     network_address_t temp;// = (network_address_t)malloc(2*sizeof(unsigned int));
     network_get_my_address(temp);
     //create header (miniheader.h has type def)
