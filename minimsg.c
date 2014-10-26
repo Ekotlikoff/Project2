@@ -56,7 +56,8 @@ miniport_create_unbound(int port_number)
 {
     miniport_t this_port;
     if (port_number >= bound_lowerbound){
-        printf("invalid unbound port_number\n");
+        printf("USER ERROR: invalid unbound port_number\n");
+        return (miniport_t)NULL;
     }
     if (ports[port_number] == NULL) {
 	this_port       		       = (miniport_t)malloc(sizeof(miniport));
@@ -79,6 +80,7 @@ int find_next_bound_num() {
             return counter;
         }
     }
+    printf("ERROR: no available bound ports\n");
     return -1;
 }
 
