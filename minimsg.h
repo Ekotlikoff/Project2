@@ -7,7 +7,10 @@
  *      the names for types and functions defined here. Functions must take
  *      the exact arguments in the prototypes.
  */
+
 #include "network.h"
+#include "queue.h"
+#include "synch.h"
 
 /* The maximum size of a minimsg.
  * Must be <= MAX_NETWORK_PKT_SIZE - NETWORK_HDR_SIZE
@@ -19,6 +22,13 @@ typedef char* minimsg_t;
 
 /* performs any required initialization of the minimsg layer.  */
 extern void minimsg_initialize();
+
+extern queue_t port_get_queue(miniport_t port);
+
+extern semaphore_t port_get_sema(miniport_t port);
+
+// returns 1 if port exists 0 otherwise
+extern int port_exists(int port_number);
 
 /* Creates an unbound port for listening. Multiple requests to create the same
  * unbound port should return the same miniport reference. It is the responsibility

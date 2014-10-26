@@ -5,8 +5,7 @@
 #include <stdio.h>
 #include "minimsg.h"
 #include "miniheader.h"
-#include "synch.h"
-#include "queue.h"
+
 
 #define BOUND 0
 #define UNBOUND 1
@@ -44,6 +43,16 @@ minimsg_initialize()
 	ports = (miniport_t*)calloc(bound_upperbound,sizeof(miniport_t));
 }
 
+int
+port_exists(int port_num){
+    if (ports[port_num] == NULL){
+        return 0;
+    }
+    else {
+        return 1;
+    }
+}
+
 /* Creates an unbound port for listening. Multiple requests to create the same
  * unbound port should return the same miniport reference. It is the responsibility
  * of the programmer to make sure he does not destroy unbound miniports while they
@@ -70,6 +79,14 @@ miniport_create_unbound(int port_number)
 	this_port = ports[port_number];
     }
     return this_port;
+}
+
+queue_t port_get_queue(miniport_t port){
+    return port->unbound.incoming_packets;
+}
+
+semaphore_t port_get_sema(miniport_t port){
+    return port->unbound.data_ready;
 }
 
 //returns next available bound number, -1 if none
@@ -116,6 +133,11 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
     return this_port;
 }
 
+void destroy_helper(void* elem, void* item){
+    network_interrupt_arg_t* packet = (network_interrupt_arg_t*) elem;
+    free(packet);
+    return;
+}
 /* Destroys a miniport and frees up its resources. If the miniport was in use at
  * the time it was destroyed, subsequent behavior is undefined.
  */
@@ -124,6 +146,7 @@ miniport_destroy(miniport_t miniport)
 {
 	if (miniport->type == UNBOUND) {
 		semaphore_destroy(miniport->unbound.data_ready);
+                queue_iterate(miniport->unbound.incoming_packets,destroy_helper,NULL); //frees all the packets left in the queue
 		queue_free(miniport->unbound.incoming_packets);
 	}
         ports[miniport->port_number] = NULL;
@@ -148,10 +171,16 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
     header->protocol = PROTOCOL_MINIDATAGRAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,local_bound_port->bound.remote_address);
-//    pack_unsigned_short(header->source_port,(unsigned short) //need to pack the ports
-    //pack header
+    //TODO need to pack ports
+    pack_unsigned_short(header->source_port,(unsigned short) local_unbound_port->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(header->destination_port,(unsigned short) local_bound_port->bound.remote_unbound_port);
     //network_send_pkt()
-    return 0;
+    return network_send_pkt(local_bound_port->bound.remote_address, 
+                            sizeof(*header), 
+                            (char*)header,
+                            len - sizeof(*header),
+                            msg
+                           );
 }
 
 /* Receives a message through a locally unbound port. Threads that call this function are
@@ -164,11 +193,19 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
  */
 int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_port, minimsg_t msg, int *len)
 {
-    //p on the sema
-    //pop off the queue
-    //unpack header unless this should be done in interrupt handler?
+    void ** temp = NULL;
+    network_interrupt_arg_t* packet;
+    //mini_header_t header;
+    //miniport_t* local_port;
+    semaphore_P(local_unbound_port->unbound.data_ready);
+    //pop off the queue waiting TODO until we decide what we put in network_handler
+    queue_dequeue(local_unbound_port->unbound.incoming_packets,temp);
+    packet = (network_interrupt_arg_t*)*temp;
+    //header = (mini_header
     //create new local bound_port
+    //local_port = miniport_create_bound(packet->buffer
     //return port,len, and header
+    //FREE PACKET (packets are freed in handler if dropped, destroy if destroyed, and here if received)
     //return number of data payload bytes recieved not invlusive of header
     return 0;
 }
