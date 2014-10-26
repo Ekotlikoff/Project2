@@ -1,7 +1,7 @@
 /* network test program 3
 
-     local loopback test: spawns three threads and creates two ports. one
-     thread acts as the sender and sends pairs of messages, one to each port,
+     local loopback test: spawns NUM_RECEIVERS+1 threads and creates NUM_RECEIVERS ports. one
+     thread acts as the sender and sends messages, one to each port,
      in a loop, with yields in between. each of the other threads is assigned a
      port, and reads messages out of it. both ports are local.
 
