@@ -3,6 +3,7 @@
  */
 #include <stdlib.h>
 #include "minimsg.h"
+#include "miniheader.h"
 #include "synch.h"
 #include "queue.h"
 
@@ -17,13 +18,16 @@ typedef struct miniport
 	int type;          		//BOUND or UNBOUND
 	int port_number;
 	union {
-	    network_address_t dest;     //BOUND
-    	    semaphore_t sema; 	        //semaphore for blocking on minimsg_receive (handle_network_interrupt V's)
-	} destaddr_or_sema;
-	union {
-	    int dest_port;   	        //BOUND
-	    queue_t packets;   		//UNBOUND
-	} destport_or_packets;
+            struct {
+                queue_t incoming_packets;
+                semaphore_t data_ready;
+            } unbound;
+            
+            struct {
+                network_address_t remote_address;
+                int remote_unbound_port;
+            } bound;
+	};
 } miniport;
 
 miniport_t* unbound_ports;
@@ -52,8 +56,8 @@ miniport_create_unbound(int port_number)
 	this_port       		       = (miniport_t)malloc(sizeof(miniport));
 	this_port->type   		       = UNBOUND;
 	this_port->port_number 		       = port_number;
-    	this_port->destaddr_or_sema.sema       = semaphore_create();
-    	this_port->destport_or_packets.packets = queue_new();
+    	this_port->unbound.data_ready                  = semaphore_create();
+    	this_port->unbound.incoming_packets            = queue_new();
     }
     else {
 	this_port = unbound_ports[port_number];
@@ -83,8 +87,8 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
     this_port    		                 = (miniport_t)malloc(sizeof(miniport));
     this_port->type		                 = BOUND;
     this_port->port_number 	    		 = *current_bound;
-    network_address_copy(addr,this_port->destaddr_or_sema.dest);
-    this_port->destport_or_packets.dest_port     = remote_unbound_port_number;
+    network_address_copy(addr,this_port->bound.remote_address);
+    this_port->bound.remote_unbound_port               = remote_unbound_port_number;
     current_bound++;
     return this_port;
 }
@@ -96,8 +100,8 @@ void
 miniport_destroy(miniport_t miniport)
 {
 	if (miniport->type == UNBOUND) {
-		semaphore_destroy(miniport->destaddr_or_sema.sema);
-		queue_free(miniport->destport_or_packets.packets);
+		semaphore_destroy(miniport->unbound.data_ready);
+		queue_free(miniport->unbound.incoming_packets);
 	}
 }
 
@@ -113,7 +117,14 @@ miniport_destroy(miniport_t miniport)
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
 {
+    mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header));
+    network_address_t temp;// = (network_address_t)malloc(2*sizeof(unsigned int));
+    network_get_my_address(temp);
     //create header (miniheader.h has type def)
+    header->protocol = PROTOCOL_MINIDATAGRAM;
+    pack_address(header->source_address,temp);
+    pack_address(header->destination_address,local_bound_port->bound.remote_address);
+//    pack_unsigned_short(header->source_port,(unsigned short) //need to pack the ports
     //pack header
     //network_send_pkt()
     return 0;
