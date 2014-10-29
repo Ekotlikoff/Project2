@@ -177,10 +177,8 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
     header->protocol = PROTOCOL_MINIDATAGRAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,local_bound_port->bound.remote_address);
-    //TODO need to pack ports
     pack_unsigned_short(header->source_port,(unsigned short) local_unbound_port->port_number); //storing source_port as local_unbound_port's port number
     pack_unsigned_short(header->destination_port,(unsigned short) local_bound_port->bound.remote_unbound_port);
-    //network_send_pkt()
     return network_send_pkt(local_bound_port->bound.remote_address,
                             sizeof(*header),
                             (char*)header,
