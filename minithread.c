@@ -110,7 +110,7 @@ minithread_t getNextThread()
 */
 int minithread_mark_dead(arg_t args)
 {
-    //printf("Thread marked as dead.\n");
+    printf("Thread marked as dead.\n");
     minithread_self()->isDead = true;
     semaphore_V(threads_to_delete);
     queue_append(deadQueue,minithread_self());
@@ -174,6 +174,7 @@ minithread_stop() {
     {
 
         printf("Thread Stopped with no other availiable threads. Go Idle.\n\r");
+        set_interrupt_level(ENABLED);
         while(1);
     }
     else
@@ -192,6 +193,7 @@ minithread_start(minithread_t t) {
 
 void
 minithread_yield() {
+    //interrupt_level_t last;
     minithread_t nextThread = NULL;
     minithread_t temp = NULL;
     nextThread = getNextThread();
@@ -213,6 +215,7 @@ minithread_yield() {
             if(!(currentThread->isDead) || currentThread == deletionThread)
             {
                 printf("No availiable threads. Go Idle.\n");
+                /*last = */set_interrupt_level(ENABLED);
                 while(1){}
             }
             else
@@ -231,6 +234,7 @@ minithread_yield() {
         else
         {
             printf("Error - System started without a main thread.\n");
+            /*last = */set_interrupt_level(ENABLED);
             while(1);
         }
     }
@@ -351,7 +355,7 @@ f(void* arg){  // helper function for minithread_sleep_with_timeout
 void
 minithread_sleep_with_timeout(int delay){
     semaphore_t signal = semaphore_create();
-    register_alarm(delay,f,(void *)signal); 
+    register_alarm(delay,f,(void *)signal);
     semaphore_P(signal);
     semaphore_destroy(signal);
 }
@@ -359,21 +363,24 @@ minithread_sleep_with_timeout(int delay){
 void
 network_handler(network_interrupt_arg_t* packet){
     miniport_t this_port;
-    mini_header_t header; 
+    mini_header_t header;
+    interrupt_level_t last = set_interrupt_level(DISABLED);
     int port_num;
-    header = (mini_header_t)packet->buffer; //TODO get header off front end 
+    header = (mini_header_t)packet->buffer; //TODO get header off front end
     port_num = (int)unpack_unsigned_short(header->destination_port);//TODO casting to int is this ok?
-   if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
-      free(packet->sender);
-      free(packet->buffer);
-      free(packet);
-      return;
-   }
-   else { //otherwise store it in the deisgnated port's queue to be received and free it later
-      this_port = miniport_create_unbound(port_num);
-      queue_append(port_get_queue(this_port),(void*)packet);
-      semaphore_V(port_get_sema(this_port));
-      return;
+    if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
+        if(packet) {
+            free(packet);
+        }
+        set_interrupt_level(last);
+        return;
+    }
+    else { //otherwise store it in the deisgnated port's queue to be received and free it later
+        this_port = miniport_create_unbound(port_num);
+        queue_append(port_get_queue(this_port),(void*)packet);
+        semaphore_V(port_get_sema(this_port));
+        set_interrupt_level(last);
+        return;
    }
 }
 

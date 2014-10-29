@@ -41,7 +41,7 @@ queue_new() {
 
 void *
 queue_first(queue_t queue) {
-  if (queue->first == NULL){
+  if (!queue || queue->first == NULL){
     return NULL;
   }
   return queue->first->val;
@@ -242,11 +242,12 @@ queue_delete(queue_t queue, void* item) {
   {
       printf("length %i \n",queue->length);
       printf("Error non-zero but first is null\n");
+      return -1;
   }
   prev = NULL;
   current = queue->first;
   next = current->next;
-  for(counter =0;counter < queue->length; counter++)
+  for(counter =0;counter < queue->length && current && next; counter++)
   {
       if(current->val==item)
       {

@@ -24,7 +24,7 @@ typedef struct miniport
                 queue_t incoming_packets;
                 semaphore_t data_ready;
             } unbound;
-            
+
             struct {
                 network_address_t remote_address;
                 int remote_unbound_port;
@@ -32,17 +32,17 @@ typedef struct miniport
 	};
 } miniport;
 
-miniport_t* ports;
+miniport_t ports[bound_lowerbound];
 int* current_bound;
 
 /* performs any required initialization of the minimsg layer.
  */
-void
+/*void
 minimsg_initialize()
 {
 	ports = (miniport_t*)calloc(bound_upperbound,sizeof(miniport_t));
 }
-
+*/
 int
 port_exists(int port_num){
     if (ports[port_num] == NULL){
@@ -64,19 +64,20 @@ miniport_t
 miniport_create_unbound(int port_number)
 {
     miniport_t this_port;
-    if (port_number >= bound_lowerbound){
+    if (port_number >= bound_lowerbound || port_number < 0){
         printf("USER ERROR: invalid unbound port_number\n");
         return (miniport_t)NULL;
     }
     if (ports[port_number] == NULL) {
-	this_port       		       = (miniport_t)malloc(sizeof(miniport));
-	this_port->type   		       = UNBOUND;
-	this_port->port_number 		       = port_number;
+        this_port       		       = (miniport_t)malloc(sizeof(miniport));
+        this_port->type   		       = UNBOUND;
+        this_port->port_number 		       = port_number;
     	this_port->unbound.data_ready                  = semaphore_create();
     	this_port->unbound.incoming_packets            = queue_new();
+    	ports[port_number] = this_port;
     }
     else {
-	this_port = ports[port_number];
+        this_port = ports[port_number];
     }
     return this_port;
 }
@@ -112,7 +113,7 @@ int find_next_bound_num() {
 miniport_t
 miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
 {
-    miniport_t this_port; 
+    miniport_t this_port;
     int this_port_number;
     if (current_bound == NULL){
         current_bound = (int*)malloc(sizeof(int));
@@ -144,12 +145,17 @@ void destroy_helper(void* elem, void* item){
 void
 miniport_destroy(miniport_t miniport)
 {
-	if (miniport->type == UNBOUND) {
-		semaphore_destroy(miniport->unbound.data_ready);
-                queue_iterate(miniport->unbound.incoming_packets,destroy_helper,NULL); //frees all the packets left in the queue
-		queue_free(miniport->unbound.incoming_packets);
-	}
-        ports[miniport->port_number] = NULL;
+    if(miniport) {
+        if(miniport->port_number<bound_lowerbound && miniport->port_number>=0) {
+            ports[miniport->port_number] = NULL;
+        }
+        if (miniport->type == UNBOUND) {
+            semaphore_destroy(miniport->unbound.data_ready);
+            queue_iterate(miniport->unbound.incoming_packets,destroy_helper,NULL); //frees all the packets left in the queue
+            queue_free(miniport->unbound.incoming_packets);
+        }
+        free(miniport);
+    }
 }
 
 /* Sends a message through a locally bound port (the bound port already has an associated
@@ -164,7 +170,7 @@ miniport_destroy(miniport_t miniport)
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
 {
-    mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header)); 
+    mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header));
     network_address_t temp;// = (network_address_t)malloc(2*sizeof(unsigned int));
     network_get_my_address(temp);
     //create header (miniheader.h has type def)
@@ -175,17 +181,17 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
     pack_unsigned_short(header->source_port,(unsigned short) local_unbound_port->port_number); //storing source_port as local_unbound_port's port number
     pack_unsigned_short(header->destination_port,(unsigned short) local_bound_port->bound.remote_unbound_port);
     //network_send_pkt()
-    return network_send_pkt(local_bound_port->bound.remote_address, 
-                            sizeof(*header), 
+    return network_send_pkt(local_bound_port->bound.remote_address,
+                            sizeof(*header),
                             (char*)header,
-                            len - sizeof(*header),
+                            len,
                             msg
                            );
 }
 
 /* Receives a message through a locally unbound port. Threads that call this function are
  * blocked until a message arrives. Upon arrival of each message, the function must create
- * a new bound port that targets the sender's address and listening port, so that use of
+ * a new bound port that targets9 the sender's address and listening port, so that use of
  * this created bound port results in replying directly back to the sender. It is the
  * responsibility of this function to strip off and parse the header before returning the
  * data payload and data length via the respective msg and len parameter. The return value
@@ -193,20 +199,22 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
  */
 int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_port, minimsg_t msg, int *len)
 {
-    void ** temp = NULL;
     network_interrupt_arg_t* packet;
-    //mini_header_t header;
-    //miniport_t* local_port;
+    mini_header_t header;
+    int i;
+    network_address_t address;
+    char* payload_start;
     semaphore_P(local_unbound_port->unbound.data_ready);
-    //pop off the queue waiting TODO until we decide what we put in network_handler
-    queue_dequeue(local_unbound_port->unbound.incoming_packets,temp);
-    packet = (network_interrupt_arg_t*)*temp;
-    //header = (mini_header
-    //create new local bound_port
-    //local_port = miniport_create_bound(packet->buffer
-    //return port,len, and header
-    //FREE PACKET (packets are freed in handler if dropped, destroy if destroyed, and here if received)
-    //return number of data payload bytes recieved not invlusive of header
-    return 0;
+    queue_dequeue(local_unbound_port->unbound.incoming_packets,(void**)&packet);
+    header = (mini_header_t)packet->buffer;
+    *len = packet->size - sizeof(struct mini_header);
+    unpack_address(header->source_address,address);
+    *new_local_bound_port = miniport_create_bound(address,unpack_unsigned_short(header->source_port));
+    payload_start = (char*)(header+1);
+    for(i=0;i<MINIMSG_MAX_MSG_SIZE;i++) {
+        msg[i] = payload_start[i];
+    }
+    free(packet);
+    return *len;
 }
 
