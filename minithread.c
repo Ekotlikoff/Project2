@@ -110,10 +110,14 @@ minithread_t getNextThread()
 */
 int minithread_mark_dead(arg_t args)
 {
-    printf("Thread marked as dead.\n");
+    interrupt_level_t last;
+    last = set_interrupt_level(DISABLED);
+    //printf("Thread marked as dead.\n");
     minithread_self()->isDead = true;
     semaphore_V(threads_to_delete);
     queue_append(deadQueue,minithread_self());
+    set_interrupt_level(last);
+    set_interrupt_level(last);
     minithread_yield();
     return 0; // THIS SHOULD NOT RETURN
 }
@@ -123,18 +127,22 @@ int minithread_mark_dead(arg_t args)
 minithread_t
 minithread_fork(proc_t proc, arg_t arg) {
     minithread_t newThread;
+    interrupt_level_t last = set_interrupt_level(DISABLED);
     newThread = minithread_create(proc,arg);
     multilevel_queue_enqueue(readyQueue,0,newThread);
+    set_interrupt_level(last);
     return newThread;
 }
 
 minithread_t
 minithread_create(proc_t proc, arg_t arg) {
     minithread_t newThread;
-    //printf("Creating Thread.\n");
+    interrupt_level_t last;
+    last = set_interrupt_level(DISABLED);
     newThread = (minithread_t)malloc(sizeof(struct minithread));
     if(!newThread)
     {
+        set_interrupt_level(last);
         return NULL;
     }
     minithread_allocate_stack(&(newThread->stackbase),&(newThread->stacktop));
@@ -144,6 +152,7 @@ minithread_create(proc_t proc, arg_t arg) {
     newThread->ticksToDeschedule = 1;
     newThread->queueLevel = 0;
     lastID++;
+    set_interrupt_level(last);
     return newThread;
 }
 
@@ -167,6 +176,7 @@ minithread_id() {
 void
 minithread_stop() {
     minithread_t next = NULL;
+    interrupt_level_t last = set_interrupt_level(DISABLED);
     minithread_t temp = minithread_self();
     next = getNextThread();
     queue_append(blockedList,minithread_self());
@@ -180,6 +190,7 @@ minithread_stop() {
     else
     {
         currentThread = next;
+        set_interrupt_level(last);
         minithread_switch(&(temp->stacktop),&(currentThread->stacktop)); // SWITCH
     }
 
@@ -187,17 +198,21 @@ minithread_stop() {
 
 void
 minithread_start(minithread_t t) {
+
+    interrupt_level_t last = set_interrupt_level(DISABLED);
     queue_delete(blockedList,t);
     multilevel_queue_enqueue(readyQueue,t->queueLevel,t);
+    set_interrupt_level(last);
 }
 
 void
 minithread_yield() {
-    //interrupt_level_t last;
+    interrupt_level_t last;
     minithread_t nextThread = NULL;
     minithread_t temp = NULL;
     nextThread = getNextThread();
     yieldFlag = 1;
+    last = set_interrupt_level(DISABLED);
     if(currentThread != NULL)
     {
         if(nextThread!=NULL)
@@ -208,6 +223,7 @@ minithread_yield() {
             }
             temp = currentThread;
             currentThread = nextThread;
+            set_interrupt_level(last);
             minithread_switch(&(temp->stacktop),&(currentThread->stacktop));
         }
         else
@@ -215,11 +231,12 @@ minithread_yield() {
             if(!(currentThread->isDead) || currentThread == deletionThread)
             {
                 printf("No availiable threads. Go Idle.\n");
-                /*last = */set_interrupt_level(ENABLED);
+                set_interrupt_level(ENABLED);
                 while(1){}
             }
             else
             {
+                set_interrupt_level(last);
                 minithread_switch(&(currentThread->stacktop),&(currentThread->stacktop));
             }
         }
@@ -229,12 +246,13 @@ minithread_yield() {
         if(nextThread!=NULL)
         {
             currentThread = nextThread;
+            set_interrupt_level(last);
             minithread_switch(&bogusPointer,&(currentThread->stacktop));
         }
         else
         {
             printf("Error - System started without a main thread.\n");
-            /*last = */set_interrupt_level(ENABLED);
+            set_interrupt_level(ENABLED);
             while(1);
         }
     }
