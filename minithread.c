@@ -384,8 +384,8 @@ network_handler(network_interrupt_arg_t* packet){
     mini_header_t header;
     interrupt_level_t last = set_interrupt_level(DISABLED);
     int port_num;
-    header = (mini_header_t)packet->buffer; //TODO get header off front end
-    port_num = (int)unpack_unsigned_short(header->destination_port);//TODO casting to int is this ok?
+    header = (mini_header_t)packet->buffer;
+    port_num = (int)unpack_unsigned_short(header->destination_port);
     if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
         if(packet) {
             free(packet);

@@ -40,7 +40,6 @@ thread(int* arg) {
     minimsg_send(listen_port, send_port, text, textlen);
     minimsg_receive(listen_port, &from, buffer, &length);
     printf("%s", buffer);
-
     return 0;
 }
 

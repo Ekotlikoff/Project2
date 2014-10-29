@@ -172,6 +172,10 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
 {
     mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header));
     network_address_t temp;// = (network_address_t)malloc(2*sizeof(unsigned int));
+    if (len > MINIMSG_MAX_MSG_SIZE) {
+        printf("ERROR: packet too large\n");
+        return -1;
+    }
     network_get_my_address(temp);
     //create header (miniheader.h has type def)
     header->protocol = PROTOCOL_MINIDATAGRAM;
@@ -202,7 +206,9 @@ int minimsg_receive(miniport_t local_unbound_port, miniport_t* new_local_bound_p
     int i;
     network_address_t address;
     char* payload_start;
+    printf("P'ing\n");
     semaphore_P(local_unbound_port->unbound.data_ready);
+    printf("unblocked!\n");
     queue_dequeue(local_unbound_port->unbound.incoming_packets,(void**)&packet);
     header = (mini_header_t)packet->buffer;
     *len = packet->size - sizeof(struct mini_header);
