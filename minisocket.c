@@ -1,7 +1,17 @@
 /*
  *	Implementation of minisockets.
  */
+#include <stdlib.h>
+#include <stdio.h>
 #include "minisocket.h"
+#include "miniheader.h"
+
+
+#define client_upperbound 65536
+#define server_upperbound 32768
+#ifndef NULL
+#define NULL 0
+#endif
 
 struct minisocket
 {
@@ -9,9 +19,54 @@ struct minisocket
   /* put your definition of minisockets here */
 };
 
+minisocket_t ports[client_upperbound];
+
+typedef void (*handle)(mini_header_t); /* pointer to current handling function, each socket should have one eh'? */
+
+void handle_SYN (mini_header_t header){ //1
+	//check that packet is MSG_SYN, keep in mind this is being done in network handler
+	//if so set_handle(port number of this socket, 2) and wakeup the thread blocking on create server with the SYN_ACK flag
+	//raised and give it address and port of client so that it will send SYN_ACK with updated ack_number and retransmit...
+}
+void handle_ACK (mini_header_t header){ //2
+	//if packet is MSG_SYN again reply again with SYNACK
+	//else if is MSG_ACK to same port notify the socket that it's been initialized to specific client (unblock thread waiting on it)
+	//and set_handle(port number of this socket, 3)
+}
+
+void handle_data (mini_header_t header){ //3
+	//TODO WHAT SHOULD THIS DO
+}
+
+void handle_SYNACK (mini_header_t header){ //-1
+	//check that packet is MSG_SYNACK if so reply with MSG_ACK and 
+	//set_handle(port number of this socket, -2) TODO WHAT SHOULD THIS NEXT FUNC BE
+}
+
+void 
+	//-2
+
+
+void set_handle (minisocket_t, int state) {
+	if (state == 1){
+		handle = handle_SYN;
+	}
+	else if (state = 2) {
+		handle = handle_ACK;
+	}
+}
+
+
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
 {
+
+	// for sockets
+	// socket number
+	// queue for packets
+	// sequence number (when send increment)
+	// ack number (when receive increment)
+	// send semaphore (and outer sema to make sure only one person is manipulating that sema at a time)
 
 }
 
@@ -28,6 +83,30 @@ void minisocket_initialize()
  */
 minisocket_t minisocket_server_create(int port, minisocket_error *error)
 {
+	// block on receiving msg
+	// if no thread is waiting for a connection on given port, server shouldn't respond.  The client, after 7 retries will 
+	// return SOCKET_NOSERVER to the user
+	//
+	// otherwise, server should send an MSG_SYNACK (and retransmit till either timeout (where the server should reset the port 
+	// and go back to listening mode) or receive client's MSG_ACK)
+
+	// You have to make sure that sockets are used one-to-one, i.e. one socket will be sending packets to only one other socket. 
+	// Any attempt to open a new connection to an already used socket (i.e. socket to which there is another connection already 
+	// made) should result in an MSG_FIN packet sent back to the client. The client should report this as a SOCKET_BUSY error.
+	// ^ TODO UNDERSTANDING, will this require server to respond with a busy message?  YES!  in interrupt handler of server should 
+	// check if server is busy and respond with busy if that's the case
+
+	// need big array of sockets (for some reason, find this out)
+
+	// network_handler
+	// all non data packets are handled directly here
+
+	// multiple ways to handle state, could have enum states or a function pointer called handle that represents what state 
+	// you're at. when the state changes update the pointer
+
+	// servers treated like unbound when creating
+	// clients treated like bound when creating
+	// also the numbers are subject to the same restrictions as port numbers
 
 }
 
@@ -48,6 +127,10 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
  */
 minisocket_t minisocket_client_create(network_address_t addr, int port, minisocket_error *error)
 {
+
+	// send MSG_SYN 7 times until reply, if none return SOCKET_NOSERVER
+
+	// if MSG_SYNACK supplied, reply with MSG_ACK
 
 }
 
@@ -74,10 +157,16 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_error *error)
 {
 
+//	P outer: to force one outgoing message at a time
+//  	register alarm to V send_lock after timeout
+//  	network_send
+//		P send_lock:
+//			wait
+
 }
 
 /*
- * Receive a message from the other end of the socket. Blocks until
+ * A thread asks to receive a message from the other end of the socket. Blocks until
  * some data is received (which can be smaller than max_len bytes).
  *
  * Arguments: the socket on which the communication is made (socket), the memory
@@ -88,7 +177,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
  */
 int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisocket_error *error)
 {
-
+	//just block on the receive sema and then pop off of data queue.
 }
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
@@ -98,5 +187,6 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
  */
 void minisocket_close(minisocket_t socket)
 {
-
+// need to notify all threads blocking on this socket with recieve
+// after fin receives/sends on this socket should fail
 }
