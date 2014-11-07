@@ -386,7 +386,14 @@ network_handler(network_interrupt_arg_t* packet){
     int port_num;
     header = (mini_header_t)packet->buffer;
     port_num = (int)unpack_unsigned_short(header->destination_port);
-    if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
+    // check if PROTOCOL_MINIDATAGRAM or PROTOCOL_MINISTREAM
+    // if PROTOCOL_MINISTREAM
+    // check if socket_exists, if no return;
+    // check if packet is control flow or contains data
+    // if control -> call socket's function
+    // if data    -> call socket's handle data
+    // if PROTOCOL_MINIDATAGRAM
+        if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
         if(packet) {
             free(packet);
         }
