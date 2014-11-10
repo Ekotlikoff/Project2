@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "minisocket.h"
 #include "miniheader.h"
+#include "synch.h"
 
 
 #define client_upperbound 65536
@@ -27,19 +28,21 @@ struct minisocket
 	int 			  seq_number; 
 	int 			  ack_number; 
 	// send semaphore(0) (and outer sema(1) to make sure only one person is manipulating that sema at a time)
-	// pointer to current control handling function
+	handle 			  handle_function; //pointer to current control flow handling function
 };
 
 // big array of clients and servers
 minisocket_t ports[client_upperbound];
-int* current_client; //current client port number
+//current client port number
+int* current_client;
 
-// type of handle control packet function, each socket has one of these
-typedef void (*handle)(mini_header_t); /* pointer to current handling function, each socket should have one eh'? */
+// returns current control flow function, see below for all the options
+handle get_handle_function(minisocket_t socket) {
+	return socket->handle_function;
+}
 
-
+// CONTROL FLOW FUNCTIONS
 // SERVER
-
 void handle_SYN (mini_header_t header){ //1
 	//MSG_SYN -> set_handle(port number of this socket, 2)
 	//			 if packet's p_seq == this ack + 1 set this socket's ack to p_seq and continue, else return?
@@ -49,7 +52,6 @@ void handle_SYN (mini_header_t header){ //1
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
 }
-
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_server (mini_header_t header){ //2
 	if (initialized == 0){
@@ -67,18 +69,13 @@ void handle_control_server (mini_header_t header){ //2
 		//numbers.
 	//}
 }
-
-//
-
 // CLIENT
-
 void handle_SYNACK (mini_header_t header){ //-1
 	//if MSG_SYNACK -> if from same server and it seq = this ack + 1 if so set this ack = seq and reply with 
 	//MSG_ACK and set flag to initialize /set_handle(port number of this socket, -2)       
 	//if it's a MSG_FIN set socket's socket_busy flag to 1, server will be
 	//checking this flag during initialization and return SOCKET_BUSY error
 }
-
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_client (mini_header_t header){ //-2
 	//if ack from paired socket if its seq = this ack set flag for ack received?
@@ -89,11 +86,9 @@ void handle_control_client (mini_header_t header){ //-2
 	//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement 
 	//numbers.
 }
+// END OF CONTROL FLOW FUNCTIONS
 
-//
-
-// BELOW ARE EXPOSED IN HEADER FOR NETWORK HANDLER TO DIRECTLY USE
-
+// BELOW IS EXPOSED IN HEADER FOR NETWORK HANDLER TO DIRECTLY USE
 void handle_data (mini_header_t header){
 
 	// check and see if from paired socket (and that initialized flag is 1) (if initialized flag is 0, but we're the correctly
@@ -102,15 +97,22 @@ void handle_data (mini_header_t header){
 	// ack and adjust seq/ack number
 }
 
-
-
 // Set the socket's control handle function to specific function
 void set_handle (minisocket_t socket, int state) {
-	if (state == 1){
+	switch (state)
+	{
+	case 1:
 		handle = handle_SYN;
-	}
-	else if (state = 2) {
-		handle = handle_ACK;
+		break;
+	case 2:
+		handle = handle_control_server;
+		break;
+	case -1:
+		handle = handle_SYNACK;
+		break;
+	case -2;		
+		handle = handle_control_client;
+		break;
 	}
 }
 
@@ -286,6 +288,6 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 void minisocket_close(minisocket_t socket)
 {
 	// Set initialized to 0 and send FIN packet to socket and retransmit waiting for an ack received back, upon ack or after 7, reset everything
-// need to notify all threads blocking on this socket with recieve
-// after fin receives/sends on this socket should fail
+	// semaphore_wake_all(data_available);
+	// after fin receives/sends on this socket should fail
 }

@@ -30,6 +30,15 @@ enum minisocket_error {
   SOCKET_OUTOFMEMORY    /* function could not complete because of insufficient memory */
 };
 
+// type of handle control packet function, each socket has one of these
+typedef void (*handle)(mini_header_t); /* pointer to current handling function, each socket should have one eh'? */
+
+// returns this sockets current control flow function to be used on control flow packets
+handle get_handle_function(minisocket_t socket);
+
+// used by network handler to handle data packet
+void handle_data(mini_header_t header);
+
 /* Initializes the minisocket layer. */
 void minisocket_initialize();
 

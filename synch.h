@@ -21,6 +21,11 @@ typedef struct semaphore *semaphore_t;
 extern semaphore_t semaphore_create();
 
 /*
+ * Disable interrupts and wakeup all threads blocking
+ */
+extern void semaphore_wake_all(semaphore_t sem);
+
+/*
  * semaphore_destroy(semaphore_t sem);
  *  Deallocate a semaphore.
  */
