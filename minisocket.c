@@ -23,13 +23,13 @@ struct minisocket
 	int 			  remote_port;
 	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
 	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
-	// server_waiting = sema(0) for server waiting for connection
+	semaphore_t 	  server_waiting; //sema(0) for server waiting for connection
 	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and 
 	semaphore_t 	  outer_receieve_sema; //outer sema(1) 
 	queue_t 		  packet_queue;
 	int 			  seq_number; 
 	int 			  ack_number; 
-	semaphore_t  	  send_sema; //(0)
+	semaphore_t  	  send_sema; //(0) used for retransmissions in send and init
 	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
 	int 			  send_ack_received;
 	handle 			  handle_function; //pointer to current control flow handling function
@@ -127,6 +127,10 @@ void set_handle (minisocket_t socket, int state) {
 	}
 }
 
+// alarm function to wakeup the sending thread for retransmission
+void send_alarm_helper(void* sema){
+	semaphore_V ((semaphore_t) sema);
+}
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
@@ -149,12 +153,22 @@ void minisocket_initialize()
 minisocket_t minisocket_server_create(int port, minisocket_error *error)
 {
 	minisocket_t this_socket;
+	mini_header_reliable_t synack;
+	network_address_t temp;
+	int bytes_sent;
+	int timeout;
+	int loop_nums = 0;
 	if (port < 0 || port >= server_upperbound) {
 		error = SOCKET_INVALIDPARAMS;
 		return NULL;
 	}
+	if (ports[port] != NULL){
+		error = SOCKET_PORTINUSE;
+		return NULL;
+	}
 	// create socket
 	this_socket    		          	 = (minisocket_t)malloc(sizeof(minisocket));
+	this_socket->port_number  		 = port;
 	this_socket->seq_number       	 = 0;
 	this_socket->ack_number       	 = 0;
 	//flags, for communication with network_handler
@@ -162,6 +176,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	this_socket->initialized		 = 0;
 	this_socket->socket_busy         = 0;
 	//
+	this_socket->server_waiting		 = semaphore_create();
 	this_socket->receive_sema        = semaphore_create();
 	this_socket->outer_receieve_sema = semaphore_create();
 	semaphore_initialize(this_socket->outer_receieve_sema,1);
@@ -169,22 +184,58 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	this_socket->outer_send_sema 	 = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
 	semaphore_t 	  outer_send_sema;
-	//...
 	// add to socket array
-	//
+	ports[port] = this_socket;
 	// block on receiving SYN
-	// 
+	semaphore_P(this_socket->server_waiting);
 	// network handler wakes up this thread and supplies it with address and port of client
+	// increment seq to 1 create a MSG_SYNACK 
+	this_socket->seq_number+=1;
+	// create a MSG_SYNACK 
+	synack = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
+	network_get_my_address(temp);
+	synack->protocol = PROTOCOL_MINISTREAM;
+    pack_address(synack->source_address,temp);
+    pack_address(synack->destination_address,this_socket->remote_address);
+    pack_unsigned_short(synack->source_port,(unsigned short)this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
+	synack->msg_type = MSG_SYNACK;
+	pack_unsigned_int(synack->seq_number,(unsigned int)this_socket->seq_number);
+    pack_unsigned_int(synack->ack_number,(unsigned int)this_socket->ack_number);
+	// send and retransmit till either timeout (where the server should reset the port and go back to listening 
+	// mode, eg set handle back to handle_syn and wipe stored address and port) or initialized flag is raised)
 
-	// increment seq to 1 and create a MSG_SYNACK 
-	// send and retransmit till either timeout (where the server should reset the port and 
-	// go back to listening mode, eg set handle back to handle_syn and wipe stored address and port) or initialized flag is raised)
-
-	// You have to make sure that sockets are used one-to-one, i.e. one socket will be sending packets to only one other socket. 
-	// Any attempt to open a new connection to an already used socket (i.e. socket to which there is another connection already 
-	// made) should result in an MSG_FIN packet sent back to the client. The client should report this as a SOCKET_BUSY error.
-	// ^ TODO UNDERSTANDING, will this require server to respond with a busy message?  YES!  in interrupt handler of server should 
-	// check if server is busy and respond with busy if that's the case
+//	set timeout to 100ms
+	timeout = 100;
+//	LOOP while (initialized not raised)
+	while (this_socket->initialized == 0) {
+		loop_nums += 1;
+//		if has looped 7 times server should reset the port and go back to listening mode
+		if (loop_nums == 8){
+			loop_nums = 1;
+			timeout = 100;
+			this_socket->initialized = 0;
+			this_socket->handle = handle_SYN;
+			this_socket->remote_address = NULL;
+			this_seocket->remote_port   = NULL;
+			semaphore_P(this_socket->server_waiting);
+			pack_address(synack->destination_address,this_socket->remote_address);
+   			pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
+		}
+//  	register alarm to V send_lock after timeout
+		register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
+//  	network_send
+		network_send_pkt(this_socket->remote_address,
+            sizeof(*synack), (char*)synack,
+            0, NULL);
+//		P send_lock:
+		semaphore_P(this_socket->send_sema);
+//		double timeout
+		timeout = timeout * 2;
+	}
+	free(synack);
+	// CLIENT AND SERVER ARE NOW LINKED
+	return this_socket;
 }
 
 
@@ -227,6 +278,11 @@ int find_next_client_port() {
 minisocket_t minisocket_client_create(network_address_t addr, int port, minisocket_error *error)
 {
     minisocket_t this_socket;
+    mini_header_reliable_t syn;
+    network_address_t temp;
+    int bytes_sent;
+	int timeout;
+	int loop_nums = 0;
     // generate local port number, return appropriate error if none available
     int this_port_number = find_next_client_port();
     if (this_port_number == -1){
@@ -234,6 +290,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     	return NULL;
     }
     this_socket    		          	 = (minisocket_t)malloc(sizeof(minisocket));
+    this_socket->port_number  		 = this_port_number;
 	// set remote addr and port
     this_socket->remote_address 	 = addr;
     this_socket->remote_port         = port;
@@ -245,24 +302,60 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	this_socket->initialized		 = 0;
 	this_socket->socket_busy         = 0;
 	//
+	this_socket->server_waiting      = semaphore_create();
 	this_socket->receive_sema        = semaphore_create();
 	this_socket->outer_receieve_sema = semaphore_create();
 	semaphore_initialize(this_socket->outer_receieve_sema,1);
 	this_socket->send_sema 		     = semaphore_create();
 	this_socket->outer_send_sema     = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
-	//...
+	// add to socket array
+	ports[this_port_number] = this_socket;
 	// create MSG_SYN
-	// send MSG_SYN 7 times until reply, if socket_busy is 1 return SOCKET_BUSY and reset remote addr, port
+	syn = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
+	network_get_my_address(temp);
+	syn->protocol = PROTOCOL_MINISTREAM;
+    pack_address(syn->source_address,temp);
+    pack_address(syn->destination_address,this_socket->remote_address);
+    pack_unsigned_short(syn->source_port,(unsigned short) this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(syn->destination_port,(unsigned short) this_socket->remote_port);
+	syn->msg_type = MSG_SYN;
+	pack_unsigned_int(syn->seq_number,(unsigned int) this_socket->seq_number);
+    pack_unsigned_int(syn->ack_number,(unsigned int) this_socket->ack_number);
+	// send MSG_SYN 7 times until initialized == 1, if socket_busy is 1 return SOCKET_BUSY and reset remote addr, port
 	// if none after 7 return SOCKET_NOSERVER and reset remote addr and port
-
-	// if initialized flag set (eg if SYNACK replied) return minisocket
-
-}
-
-// alarm function to wakeup the sending thread for retransmission
-void send_alarm_helper(void* send_sema){
-	semaphore_V ((semaphore_t) send_sema);
+//	set timeout to 100ms
+	timeout = 100;
+//	LOOP while (initialized not raised)
+	while (this_socket->initialized == 0) {
+		loop_nums += 1;
+//		if has looped 7 times client should return SOCKET_BUSY reset and return
+		if (loop_nums == 8){
+			error = SOCKET_NOSERVER;
+			this_socket->remote_address = NULL;
+			this_socket->remote_port = NULL;
+			return NULL;
+		}
+		if (this_socket->socket_busy){
+			error = SOCKET_BUSY;
+			this_socket->remote_address = NULL;
+			this_socket->remote_port = NULL;
+			return NULL;
+		}
+//  	register alarm to V send_lock after timeout
+		register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
+//  	network_send
+		network_send_pkt(this_socket->remote_address,
+            sizeof(*syn), (char*)syn,
+            0, NULL);
+//		P send_lock:
+		semaphore_P(this_socket->send_sema);
+//		double timeout
+		timeout = timeout * 2;
+	}
+	free(syn);
+	// CLIENT AND SERVER ARE NOW LINKED
+	return this_socket;
 }
 
 /* 
@@ -286,7 +379,7 @@ void send_alarm_helper(void* send_sema){
  */
 int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_error *error)
 {
-	mini_header_reliable_t header = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
+	mini_header_reliable_t header;
 	network_address_t temp;
 	int bytes_sent;
 	int timeout;
@@ -298,8 +391,11 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 	if (len == 0){
 		return 0;
 	}
+	// increment this socket's seq number
+	socket->seq_number += 1;
     network_get_my_address(temp);
     //create the header (miniheader.h has type def)
+    header = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
     header->protocol = PROTOCOL_MINISTREAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,socket->remote_address);
@@ -319,9 +415,10 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 //		LOOP while (ack not received) (need flag to see if acked or can check ack/seq number?)
 		while (socket->send_ack_received == 0) {
 			loop_nums += 1;
-//			if loop_nums == 7 set error to appropriate val and return succesful bytes transmitted
+//			if has looped 7 times set error to appropriate val and return succesful bytes transmitted
 			if (loop_nums == 8){
 				error = SOCKET_SENDERROR;
+				free(header);
 				return -1;
 			}
 //  		register alarm to V send_lock after timeout
@@ -336,6 +433,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 			timeout = timeout * 2;
 		}
 		socket->send_ack_received = 0;
+		free(header);
 	semaphore_V(socket->outer_send_sema);
 	return bytes_sent;
 }
@@ -362,7 +460,12 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 			queue_dequeue(socket->packet_queue,temp);
 		semaphore_V(socket->receive_sema);
 	semaphore_V(socket->outer_receieve_sema);
-	return sizeof(*msg);
+	if (sizeof(*temp) > max_len){
+		error = SOCKET_OUTOFMEMORY; //maybe just receive error?
+		return -1;
+	}
+	msg = temp;
+	return sizeof(*temp);
 }
 
 /* Close a connection. If minisocket_close is issued, any send or receive should

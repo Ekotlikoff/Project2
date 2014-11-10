@@ -170,6 +170,7 @@ miniport_destroy(miniport_t miniport)
 int
 minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg_t msg, int len)
 {
+    int bytes_sent;
     mini_header_t header = (mini_header_t)malloc(sizeof(struct mini_header));
     network_address_t temp;// = (network_address_t)malloc(2*sizeof(unsigned int));
     if (len > MINIMSG_MAX_MSG_SIZE) {
@@ -183,12 +184,14 @@ minimsg_send(miniport_t local_unbound_port, miniport_t local_bound_port, minimsg
     pack_address(header->destination_address,local_bound_port->bound.remote_address);
     pack_unsigned_short(header->source_port,(unsigned short) local_unbound_port->port_number); //storing source_port as local_unbound_port's port number
     pack_unsigned_short(header->destination_port,(unsigned short) local_bound_port->bound.remote_unbound_port);
-    return network_send_pkt(local_bound_port->bound.remote_address,
+    bytes_sent = network_send_pkt(local_bound_port->bound.remote_address,
                             sizeof(*header),
                             (char*)header,
                             len,
                             msg
                            );
+    free(header);
+    return bytes_sent;
 }
 
 /* Receives a message through a locally unbound port. Threads that call this function are
