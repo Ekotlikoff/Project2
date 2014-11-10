@@ -410,8 +410,7 @@ network_handler(network_interrupt_arg_t* packet){
        }
     }
     else if(header->protocol==PROTOCOL_MINISTREAM) {
-
-
+        return;
     }
     else {
         return;
