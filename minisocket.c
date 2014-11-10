@@ -203,7 +203,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	synack->protocol = PROTOCOL_MINISTREAM;
     pack_address(synack->source_address,temp);
     pack_address(synack->destination_address,this_socket->remote_address);
-    pack_unsigned_short(synack->source_port,(unsigned short)this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(synack->source_port,(unsigned short)this_socket->port_number); 
     pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
 	synack->msg_type = MSG_SYNACK;
 	pack_unsigned_int(synack->seq_number,(unsigned int)this_socket->seq_number);
@@ -322,7 +322,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	syn->protocol = PROTOCOL_MINISTREAM;
     pack_address(syn->source_address,temp);
     pack_address(syn->destination_address,this_socket->remote_address);
-    pack_unsigned_short(syn->source_port,(unsigned short) this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(syn->source_port,(unsigned short) this_socket->port_number); 
     pack_unsigned_short(syn->destination_port,(unsigned short) this_socket->remote_port);
 	syn->msg_type = MSG_SYN;
 	pack_unsigned_int(syn->seq_number,(unsigned int) this_socket->seq_number);
@@ -404,7 +404,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
     header->protocol = PROTOCOL_MINISTREAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,socket->remote_address);
-    pack_unsigned_short(header->source_port,(unsigned short) socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(header->source_port,(unsigned short) socket->port_number); 
     pack_unsigned_short(header->destination_port,(unsigned short) socket->remote_port);
 	header->msg_type = MSG_ACK;
 	pack_unsigned_int(header->seq_number,(unsigned int) socket->seq_number);
