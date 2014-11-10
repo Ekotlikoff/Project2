@@ -23,6 +23,7 @@ struct minisocket
 	int 			  remote_port;
 	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
 	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
+	int 			  send_ack_received;
 	semaphore_t 	  server_waiting; //sema(0) for server waiting for connection
 	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and
 	semaphore_t 	  outer_receieve_sema; //outer sema(1)
@@ -31,7 +32,6 @@ struct minisocket
 	int 			  ack_number;
 	semaphore_t  	  send_sema; //(0) used for retransmissions in send and init
 	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
-	int 			  send_ack_received;
 	handle 			  handle_function; //pointer to current control flow handling function
 };
 
@@ -239,10 +239,11 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	this_socket->seq_number       	 = 0;
 	this_socket->ack_number       	 = 0;
 	//flags, for communication with network_handler
-	this_socket->send_ack_received   = 0;
 	this_socket->initialized		 = 0;
 	this_socket->socket_busy         = 0;
+	this_socket->send_ack_received   = 0;
 	//
+	this_socket->packet_queue        = queue_new();
 	this_socket->server_waiting		 = semaphore_create();
 	this_socket->receive_sema        = semaphore_create();
 	this_socket->outer_receieve_sema = semaphore_create();
@@ -250,7 +251,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	this_socket->send_sema 		  	 = semaphore_create();
 	this_socket->outer_send_sema 	 = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
-	semaphore_t 	  outer_send_sema;
+	this_socket->handle 			 = handle_SYN;
 	// add to socket array
 	ports[port] = this_socket;
 	// block on receiving SYN
@@ -264,7 +265,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	synack->protocol = PROTOCOL_MINISTREAM;
     pack_address(synack->source_address,temp);
     pack_address(synack->destination_address,this_socket->remote_address);
-    pack_unsigned_short(synack->source_port,(unsigned short)this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(synack->source_port,(unsigned short)this_socket->port_number); 
     pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
 	synack->msg_type = MSG_SYNACK;
 	pack_unsigned_int(synack->seq_number,(unsigned int)this_socket->seq_number);
@@ -368,6 +369,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	this_socket->initialized		 = 0;
 	this_socket->socket_busy         = 0;
 	//
+	this_socket->packet_queue        = queue_new();
 	this_socket->server_waiting      = semaphore_create();
 	this_socket->receive_sema        = semaphore_create();
 	this_socket->outer_receieve_sema = semaphore_create();
@@ -375,6 +377,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	this_socket->send_sema 		     = semaphore_create();
 	this_socket->outer_send_sema     = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
+	this_socket->handle 			 = handle_SYNACK;
 	// add to socket array
 	ports[this_port_number] = this_socket;
 	// create MSG_SYN
@@ -383,7 +386,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	syn->protocol = PROTOCOL_MINISTREAM;
     pack_address(syn->source_address,temp);
     pack_address(syn->destination_address,this_socket->remote_address);
-    pack_unsigned_short(syn->source_port,(unsigned short) this_socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(syn->source_port,(unsigned short) this_socket->port_number); 
     pack_unsigned_short(syn->destination_port,(unsigned short) this_socket->remote_port);
 	syn->msg_type = MSG_SYN;
 	pack_unsigned_int(syn->seq_number,(unsigned int) this_socket->seq_number);
@@ -465,7 +468,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
     header->protocol = PROTOCOL_MINISTREAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,socket->remote_address);
-    pack_unsigned_short(header->source_port,(unsigned short) socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(header->source_port,(unsigned short) socket->port_number); 
     pack_unsigned_short(header->destination_port,(unsigned short) socket->remote_port);
 	header->msg_type = MSG_ACK;
 	pack_unsigned_int(header->seq_number,(unsigned int) socket->seq_number);
