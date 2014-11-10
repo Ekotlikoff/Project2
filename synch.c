@@ -32,10 +32,10 @@ semaphore_t semaphore_create() {
 
 void semaphore_wake_all(semaphore_t sem) {
   interrupt_level_t old_interrupt_level;
-  old_interrupt_level = set_interrupt_level(DISABLED);
   void* thread = NULL;
   int counter = sem->count;
-  for (;counter++;counter<0) {
+  old_interrupt_level = set_interrupt_level(DISABLED);
+  for (;counter<0;counter++) {
     queue_dequeue(sem->queue,&thread);
     minithread_start((minithread_t)thread);
   }
