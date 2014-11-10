@@ -6,6 +6,7 @@
 #include "minisocket.h"
 #include "miniheader.h"
 #include "synch.h"
+#include "alarm.h"
 
 
 #define client_upperbound 65536
@@ -16,7 +17,7 @@
 
 struct minisocket
 {
-	// socket number
+	int               port_number;
 	network_address_t remote_address;
 	int 			  remote_port;
 	// initialized = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
@@ -27,7 +28,9 @@ struct minisocket
 	// queue for packets
 	int 			  seq_number; 
 	int 			  ack_number; 
-	// send semaphore(0) (and outer sema(1) to make sure only one person is manipulating that sema at a time)
+	semaphore_t  	  send_sema; //(0)
+	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
+	int 			  send_ack_received;
 	handle 			  handle_function; //pointer to current control flow handling function
 };
 
@@ -150,6 +153,15 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 		return NULL;
 	}
 	// create socket
+	this_socket    		           = (minisocket_t)malloc(sizeof(minisocket));
+	this_socket->seq_number        = 0;
+	this_socket->ack_number        = 0;
+	this_socket->send_ack_received = 0;
+	this_socket->send_sema 		   = semaphore_create();
+	this_socket->outer_send_sema   = semaphore_create();
+	semaphore_initialize(this_socket->outer_send_sema,1);
+	semaphore_t 	  outer_send_sema;
+	//...
 	// add to socket array
 	//
 	// block on receiving SYN
@@ -213,13 +225,18 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     	error = SOCKET_NOMOREPORTS;
     	return NULL;
     }
-    this_socket    		                 = (minisocket_t)malloc(sizeof(minisocket));
+    this_socket    		           = (minisocket_t)malloc(sizeof(minisocket));
 	// set remote addr and port
-    this_socket->remote_address = addr;
-    this_socket->remote_port    = port;
+    this_socket->remote_address    = addr;
+    this_socket->remote_port       = port;
 	// set seq = 1
-	this_socket->seq_number     = 1;
-	this_socket->ack_number     = 0;
+	this_socket->seq_number        = 1;
+	this_socket->ack_number        = 0;
+	this_socket->send_ack_received = 0;
+	this_socket->send_sema 		   = semaphore_create();
+	this_socket->outer_send_sema   = semaphore_create();
+	semaphore_initialize(this_socket->outer_send_sema,1);
+	//...
 	// create MSG_SYN
 	// send MSG_SYN 7 times until reply, if socket_busy is 1 return SOCKET_BUSY and reset remote addr, port
 	// if none after 7 return SOCKET_NOSERVER and reset remote addr and port
@@ -228,6 +245,10 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 
 }
 
+// alarm function to wakeup the sending thread for retransmission
+void send_alarm_helper(void* send_sema){
+	semaphore_V ((semaphore_t) send_sema);
+}
 
 /* 
  * Send a message to the other end of the socket.
@@ -250,25 +271,59 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
  */
 int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_error *error)
 {
+	mini_header_reliable_t header = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
+	network_address_t temp;
+	int bytes_sent;
+	int timeout;
+	int loop_nums = 0;
+	if (socket->initialized == 0){ //thread is unitinitialized or dying
+		error = SOCKET_SENDERROR;
+		return -1;
+	} 
+	if (len == 0){
+		return 0;
+	}
+	// create the header
+    network_get_my_address(temp);
+    //create header (miniheader.h has type def)
+    header->protocol = PROTOCOL_MINISTREAM;
+    pack_address(header->source_address,temp);
+    pack_address(header->destination_address,socket->remote_address);
+    pack_unsigned_short(header->source_port,(unsigned short) socket->port_number); //storing source_port as local_unbound_port's port number
+    pack_unsigned_short(header->destination_port,(unsigned short) socket->remote_port);
+	header->msg_type = MSG_ACK;
+	pack_unsigned_int(header->seq_number,(unsigned int) socket->seq_number);
+    pack_unsigned_int(header->ack_number,(unsigned int) socket->ack_number);
 
-//if initialized = 0 then thread is unitinitialized or dying return SOCKET_SENDERROR
-//	P outer: to force one outgoing message at a time
+    if (len + sizeof(*header) > MAX_NETWORK_PKT_SIZE){ // if too big send max size;
+    	len = MAX_NETWORK_PKT_SIZE - sizeof(*header);
+    }
+	//	P outer: to force one outgoing message at a time
+	semaphore_P(socket->outer_send_sema);
 //		set timeout to 100ms
-//  	keep track of total length of messages sent (taking into account only partial sending because 
-//		network send can send partial right?) and loop until total length is
-//		sizeof(msg) long
-//		LOOP of if total length is sizeof(msg)
-//			LOOP while (ack not received) (need flag to see if acked or can check ack/seq number?)
-//				loop_nums += 1;
-//				if loop_nums == 7 set error to appropriate val and return succesful bytes transmitted
-//  			register alarm to V send_lock after timeout
-//  			network_send
-//				P send_lock:
-//					wait
-//				double timeout
-//			reset timeout to 100
-//		
-
+		timeout = 100;
+//		LOOP while (ack not received) (need flag to see if acked or can check ack/seq number?)
+		while (socket->send_ack_received == 0) {
+			loop_nums += 1;
+//			if loop_nums == 7 set error to appropriate val and return succesful bytes transmitted
+			if (loop_nums == 8){
+				error = SOCKET_SENDERROR;
+				return -1;
+			}
+//  		register alarm to V send_lock after timeout
+			register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
+//  		network_send
+			bytes_sent = network_send_pkt(socket->remote_address,
+                 sizeof(*header), (char*)header,
+                 len, msg);
+//			P send_lock:
+			semaphore_P(socket->send_sema);
+//			double timeout
+			timeout = timeout * 2;
+		}
+		socket->send_ack_received = 0;
+	semaphore_V(socket->outer_send_sema);
+	return bytes_sent;
 }
 
 /*
