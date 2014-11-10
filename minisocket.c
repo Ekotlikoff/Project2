@@ -43,8 +43,8 @@ handle get_handle_function(minisocket_t socket) {
 
 // CONTROL FLOW FUNCTIONS
 // SERVER
-void handle_SYN (mini_header_t header){ //1
-	//MSG_SYN -> set_handle(port number of this socket, 2)
+void handle_SYN (minisocket_t socket, mini_header_t header){ //1
+	//MSG_SYN -> set_handle(socket, 2)
 	//			 if packet's p_seq == this ack + 1 set this socket's ack to p_seq and continue, else return?
 	//			 V(server_waiting) 
 	//			 set remote_address
@@ -53,7 +53,7 @@ void handle_SYN (mini_header_t header){ //1
 	//else drop
 }
 // SERVER AND CLIENT ARE NOW PAIRED
-void handle_control_server (mini_header_t header){ //2
+void handle_control_server (minisocket_t socket, mini_header_t header){ //2
 	if (initialized == 0){
 		// if packet is MSG_SYN, if it's from different addr,port then remote_address remote_port reply with MSG_FIN
 		// else if is MSG_ACK with seq == this ack notify the socket by setting initialize flag to 1
@@ -70,14 +70,14 @@ void handle_control_server (mini_header_t header){ //2
 	//}
 }
 // CLIENT
-void handle_SYNACK (mini_header_t header){ //-1
+void handle_SYNACK (minisocket_t socket, mini_header_t header){ //-1
 	//if MSG_SYNACK -> if from same server and it seq = this ack + 1 if so set this ack = seq and reply with 
-	//MSG_ACK and set flag to initialize /set_handle(port number of this socket, -2)       
+	//MSG_ACK and set flag to initialize /set_handle(socket, -2)       
 	//if it's a MSG_FIN set socket's socket_busy flag to 1, server will be
 	//checking this flag during initialization and return SOCKET_BUSY error
 }
 // SERVER AND CLIENT ARE NOW PAIRED
-void handle_control_client (mini_header_t header){ //-2
+void handle_control_client (minisocket_t socket, mini_header_t header){ //-2
 	//if ack from paired socket if its seq = this ack set flag for ack received?
 	//if MSG_FIN reply with ack and if initialized flag = 1 set alarm for 15s to reset everything and set initialized to 0
 
@@ -89,7 +89,7 @@ void handle_control_client (mini_header_t header){ //-2
 // END OF CONTROL FLOW FUNCTIONS
 
 // BELOW IS EXPOSED IN HEADER FOR NETWORK HANDLER TO DIRECTLY USE
-void handle_data (mini_header_t header){
+void handle_data (minisocket_t socket, mini_header_t header){
 
 	// check and see if from paired socket (and that initialized flag is 1) (if initialized flag is 0, but we're the correctly
 	// paired socket, the handshake ack was lost, so this current packet represents that ack, so set initialized flag to 1)
@@ -97,6 +97,13 @@ void handle_data (mini_header_t header){
 	// ack and adjust seq/ack number
 }
 
+minisocket_t get_socket(int port_number){
+	if (port_number >= client_upperbound || port_number < 0){
+		printf("ERROR: get_socket");
+		return NULL;
+	}
+	return ports[port_number];
+}
 // Set the socket's control handle function to specific function
 void set_handle (minisocket_t socket, int state) {
 	switch (state)
