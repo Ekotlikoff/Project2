@@ -24,11 +24,11 @@ struct minisocket
 	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
 	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
 	semaphore_t 	  server_waiting; //sema(0) for server waiting for connection
-	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and 
-	semaphore_t 	  outer_receieve_sema; //outer sema(1) 
+	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and
+	semaphore_t 	  outer_receieve_sema; //outer sema(1)
 	queue_t 		  packet_queue;
-	int 			  seq_number; 
-	int 			  ack_number; 
+	int 			  seq_number;
+	int 			  ack_number;
 	semaphore_t  	  send_sema; //(0) used for retransmissions in send and init
 	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
 	int 			  send_ack_received;
@@ -64,11 +64,36 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 }
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_server (minisocket_t socket, mini_header_reliable_t header){ //2
+    network_address_t this_network_address;
+    struct mini_header_reliable response;
+    unsigned short int this_port;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
 	if (initialized == 0){
 		// if packet is MSG_SYN, if it's from different addr,port then remote_address remote_port reply with MSG_FIN
 		// else if is MSG_ACK with seq == this ack notify the socket by setting initialize flag to 1
+		if(header->message_type==MSG_SYN &&
+            (this_port!=socket->remote_port || network_compare_network_addresses(this_network_address,socket->remote_address)==0)) {
+                response->protocol = PROTOCOL_MINISTREAM;
+                pack_address(response->destination_address,this_network_address);
+                pack_address(response->source_address,myaddress);
+                pack_unsigned_short(response->destination_port,this_port);
+                pack_unsigned_short(response->source_port,socket->port);
+                response->message_type = MSG_FIN;
+                response->seq_number = socket->seq_number;
+                response->ack_number = socket->ack_number;// I DON'T KNOW WHAT VALUE TO PLACE
+                network_send_pkt(response->destination_address,sizeof(mini_header_reliable),header,0,NULL);
+                return;
+		}
+        else if(header->message_type == MSG_ACK && header->ack_number == socket->sequence) {
+            socket->initialized = 1;
+            return;
+        }
+
 	}
-	else //{
+	else {
 		//if MSG_SYN send back MSG_FIN to tell client that this socket is busy
 		//if ack from paired socket and its seq = this ack set flag for ack received?
 		//if MSG_FIN reply with ack and if initialized flag = 1 set alarm for 15s to reset everything and set initialized to 0
@@ -77,7 +102,43 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
 		//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the
 		//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 		//numbers.
-	//}
+		if(header->message_type == MSG_SYN ) {
+            response->protocol = PROTOCOL_MINISTREAM;
+            pack_address(response->destination_address,this_network_address);
+            pack_address(response->source_address,myaddress);
+            pack_unsigned_short(response->destination_port,this_port);
+            pack_unsigned_short(response->source_port,socket->port);
+            response->message_type = MSG_FIN;
+            response->seq_number = socket->seq_number;
+            response->ack_number = socket->ack_number;
+            network_send_pkt(response->destination_address,sizeof(mini_header_reliable),header,0,NULL);
+            return;
+		}
+		else if (header->message_type == MSG_ACK &&
+        this_port==socket->remote_port &&
+        (network_compare_network_addresses(this_network_address,socket->remote_address)!=0)) {
+            if(header->ack_number == socket->seq_number) {
+                socket->send_ack_recieved = 1;
+            }
+            return;
+		}
+		else if (header->message_type == MSG_FIN &&
+        this_port==socket->remote_port &&
+        (network_compare_network_addresses(this_network_address,socket->remote_address)!=0)) {
+            response->protocol = PROTOCOL_MINISTREAM;
+            pack_address(response->destination_address,this_network_address);
+            pack_address(response->source_address,myaddress);
+            pack_unsigned_short(response->destination_port,this_port);
+            pack_unsigned_short(response->source_port,socket->port);
+            response->message_type = MSG_ACK;
+            response->seq_number = socket->seq_number;
+            response->ack_number = socket->ack_number;
+            network_send_pkt(response->destination_address,sizeof(mini_header_reliable),header,0,NULL);
+            socket->initialized = 0;
+            //ALARM?
+            return;
+		}
+	}
 }
 // CLIENT
 void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
@@ -195,9 +256,9 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	// block on receiving SYN
 	semaphore_P(this_socket->server_waiting);
 	// network handler wakes up this thread and supplies it with address and port of client
-	// increment seq to 1 create a MSG_SYNACK 
+	// increment seq to 1 create a MSG_SYNACK
 	this_socket->seq_number+=1;
-	// create a MSG_SYNACK 
+	// create a MSG_SYNACK
 	synack = (mini_header_reliable_t)malloc(sizeof(struct mini_header_reliable));
 	network_get_my_address(temp);
 	synack->protocol = PROTOCOL_MINISTREAM;
@@ -208,7 +269,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 	synack->msg_type = MSG_SYNACK;
 	pack_unsigned_int(synack->seq_number,(unsigned int)this_socket->seq_number);
     pack_unsigned_int(synack->ack_number,(unsigned int)this_socket->ack_number);
-	// send and retransmit till either timeout (where the server should reset the port and go back to listening 
+	// send and retransmit till either timeout (where the server should reset the port and go back to listening
 	// mode, eg set handle back to handle_syn and wipe stored address and port) or initialized flag is raised)
 //	set timeout to 100ms
 	timeout = 100;
