@@ -59,7 +59,7 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
             semaphore_V(server_waiting);
             unpack_address((header->source_address),socket->remote_address)
             socket->remote_port = unpack_unsigned_short(header->source_port);
-            set_handle(scoket,2);
+            set_handle(socket,2);
 	}
 }
 // SERVER AND CLIENT ARE NOW PAIRED
