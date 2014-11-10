@@ -47,17 +47,23 @@ handle get_handle_function(minisocket_t socket) {
 
 // CONTROL FLOW FUNCTIONS
 // SERVER
-void handle_SYN (minisocket_t socket, mini_header_t header){ //1
+void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//MSG_SYN -> set_handle(socket, 2)
 	//			 if packet's p_seq == this ack + 1 set this socket's ack to p_seq and continue, else return?
-	//			 V(server_waiting) 
+	//			 V(server_waiting)
 	//			 set remote_address
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
+	if(header->seq_number == socket->ack_number+1)  {
+            semaphore_V(server_waiting);
+            unpack_address((header->source_address),socket->remote_address)
+            socket->remote_port = unpack_unsigned_short(header->source_port);
+            set_handle(scoket,2);
+	}
 }
 // SERVER AND CLIENT ARE NOW PAIRED
-void handle_control_server (minisocket_t socket, mini_header_t header){ //2
+void handle_control_server (minisocket_t socket, mini_header_reliable_t header){ //2
 	if (initialized == 0){
 		// if packet is MSG_SYN, if it's from different addr,port then remote_address remote_port reply with MSG_FIN
 		// else if is MSG_ACK with seq == this ack notify the socket by setting initialize flag to 1
@@ -67,37 +73,37 @@ void handle_control_server (minisocket_t socket, mini_header_t header){ //2
 		//if ack from paired socket and its seq = this ack set flag for ack received?
 		//if MSG_FIN reply with ack and if initialized flag = 1 set alarm for 15s to reset everything and set initialized to 0
 
-		//Retransmissions may also be necessary if one end indicates that it did not receive a message that was earlier sent from 
-		//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the 
-		//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement 
+		//Retransmissions may also be necessary if one end indicates that it did not receive a message that was earlier sent from
+		//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the
+		//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 		//numbers.
 	//}
 }
 // CLIENT
-void handle_SYNACK (minisocket_t socket, mini_header_t header){ //-1
-	//if MSG_SYNACK -> if from same server and it seq = this ack + 1 if so set this ack = seq and reply with 
-	//MSG_ACK and set flag to initialize /set_handle(socket, -2)       
+void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
+	//if MSG_SYNACK -> if from same server and it seq = this ack + 1 if so set this ack = seq and reply with
+	//MSG_ACK and set flag to initialize /set_handle(socket, -2)
 	//if it's a MSG_FIN set socket's socket_busy flag to 1, server will be
 	//checking this flag during initialization and return SOCKET_BUSY error
 }
 // SERVER AND CLIENT ARE NOW PAIRED
-void handle_control_client (minisocket_t socket, mini_header_t header){ //-2
+void handle_control_client (minisocket_t socket, mini_header_reliable_t header){ //-2
 	//if ack from paired socket if its seq = this ack set flag for ack received?
 	//if MSG_FIN reply with ack and if initialized flag = 1 set alarm for 15s to reset everything and set initialized to 0
 
-	//Retransmissions may also be necessary if one end indicates that it did not receive a message that was earlier sent from 
-	//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the 
-	//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement 
+	//Retransmissions may also be necessary if one end indicates that it did not receive a message that was earlier sent from
+	//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the
+	//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 	//numbers.
 }
 // END OF CONTROL FLOW FUNCTIONS
 
 // BELOW IS EXPOSED IN HEADER FOR NETWORK HANDLER TO DIRECTLY USE
-void handle_data (minisocket_t socket, mini_header_t header){
+void handle_data (minisocket_t socket, mini_header_reliable_t header){
 
 	// check and see if from paired socket (and that initialized flag is 1) (if initialized flag is 0, but we're the correctly
 	// paired socket, the handshake ack was lost, so this current packet represents that ack, so set initialized flag to 1)
-	// otherwise if initialized is 1 and this is a paired socket add to queue adjust queue sema reply with 
+	// otherwise if initialized is 1 and this is a paired socket add to queue adjust queue sema reply with
 	// ack and adjust seq/ack number
 }
 
@@ -121,7 +127,7 @@ void set_handle (minisocket_t socket, int state) {
 	case -1:
 		handle = handle_SYNACK;
 		break;
-	case -2;		
+	case -2;
 		handle = handle_control_client;
 		break;
 	}
@@ -139,7 +145,7 @@ void minisocket_initialize()
 
 }
 
-/* 
+/*
  * Listen for a connection from somebody else. When communication link is
  * created return a minisocket_t through which the communication can be made
  * from now on.
@@ -204,7 +210,6 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
     pack_unsigned_int(synack->ack_number,(unsigned int)this_socket->ack_number);
 	// send and retransmit till either timeout (where the server should reset the port and go back to listening 
 	// mode, eg set handle back to handle_syn and wipe stored address and port) or initialized flag is raised)
-
 //	set timeout to 100ms
 	timeout = 100;
 //	LOOP while (initialized not raised)
@@ -256,7 +261,7 @@ int find_next_client_port() {
 	            return counter;
 	        }
 	    }
-    }	
+    }
     printf("ERROR: no available client ports\n");
     return -1;
 }
@@ -266,7 +271,7 @@ int find_next_client_port() {
  * established create a minisocket through which the communication can be made
  * from now on.
  *
- * The first argument is the network address of the remote machine. 
+ * The first argument is the network address of the remote machine.
  *
  * The argument "port" is the port number on the remote machine to which the
  * connection is made. The port number of the local machine is one of the free
@@ -358,7 +363,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	return this_socket;
 }
 
-/* 
+/*
  * Send a message to the other end of the socket.
  *
  * The send call should block until the remote host has ACKnowledged receipt of
@@ -387,7 +392,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 	if (socket->initialized == 0){ //thread is unitinitialized or dying
 		error = SOCKET_SENDERROR;
 		return -1;
-	} 
+	}
 	if (len == 0){
 		return 0;
 	}
@@ -454,7 +459,7 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 	if (socket->initialized == 0){ //thread is unitinitialized or dying
 		error = SOCKET_RECEIVEERROR;
 		return -1;
-	} 	
+	}
 	semaphore_P(socket->outer_receieve_sema);
 		semaphore_P(socket->receive_sema);
 			queue_dequeue(socket->packet_queue,temp);
