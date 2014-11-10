@@ -7,6 +7,7 @@
 #include "miniheader.h"
 #include "synch.h"
 #include "alarm.h"
+#include "queue.h"
 
 
 #define client_upperbound 65536
@@ -20,12 +21,12 @@ struct minisocket
 	int               port_number;
 	network_address_t remote_address;
 	int 			  remote_port;
-	// initialized = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
-	// socket_busy = 0 (set to 1 if client tried to connect to already paired server)
+	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
+	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
 	// server_waiting = sema(0) for server waiting for connection
-	// sema(0) for queue (for receive calls to P on and data_handle to V on) and outer sema(0) so that multiple 
-												   //receivers aren't manipulating queue at the same time
-	// queue for packets
+	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and 
+	semaphore_t 	  outer_receieve_sema; //outer sema(1) 
+	queue_t 		  packet_queue;
 	int 			  seq_number; 
 	int 			  ack_number; 
 	semaphore_t  	  send_sema; //(0)
@@ -153,12 +154,19 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 		return NULL;
 	}
 	// create socket
-	this_socket    		           = (minisocket_t)malloc(sizeof(minisocket));
-	this_socket->seq_number        = 0;
-	this_socket->ack_number        = 0;
-	this_socket->send_ack_received = 0;
-	this_socket->send_sema 		   = semaphore_create();
-	this_socket->outer_send_sema   = semaphore_create();
+	this_socket    		          	 = (minisocket_t)malloc(sizeof(minisocket));
+	this_socket->seq_number       	 = 0;
+	this_socket->ack_number       	 = 0;
+	//flags, for communication with network_handler
+	this_socket->send_ack_received   = 0;
+	this_socket->initialized		 = 0;
+	this_socket->socket_busy         = 0;
+	//
+	this_socket->receive_sema        = semaphore_create();
+	this_socket->outer_receieve_sema = semaphore_create();
+	semaphore_initialize(this_socket->outer_receieve_sema,1);
+	this_socket->send_sema 		  	 = semaphore_create();
+	this_socket->outer_send_sema 	 = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
 	semaphore_t 	  outer_send_sema;
 	//...
@@ -225,16 +233,23 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     	error = SOCKET_NOMOREPORTS;
     	return NULL;
     }
-    this_socket    		           = (minisocket_t)malloc(sizeof(minisocket));
+    this_socket    		          	 = (minisocket_t)malloc(sizeof(minisocket));
 	// set remote addr and port
-    this_socket->remote_address    = addr;
-    this_socket->remote_port       = port;
+    this_socket->remote_address 	 = addr;
+    this_socket->remote_port         = port;
 	// set seq = 1
-	this_socket->seq_number        = 1;
-	this_socket->ack_number        = 0;
-	this_socket->send_ack_received = 0;
-	this_socket->send_sema 		   = semaphore_create();
-	this_socket->outer_send_sema   = semaphore_create();
+	this_socket->seq_number       	 = 1;
+	this_socket->ack_number          = 0;
+	//flags, for communication with network_handler
+	this_socket->send_ack_received   = 0;
+	this_socket->initialized		 = 0;
+	this_socket->socket_busy         = 0;
+	//
+	this_socket->receive_sema        = semaphore_create();
+	this_socket->outer_receieve_sema = semaphore_create();
+	semaphore_initialize(this_socket->outer_receieve_sema,1);
+	this_socket->send_sema 		     = semaphore_create();
+	this_socket->outer_send_sema     = semaphore_create();
 	semaphore_initialize(this_socket->outer_send_sema,1);
 	//...
 	// create MSG_SYN
@@ -283,9 +298,8 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 	if (len == 0){
 		return 0;
 	}
-	// create the header
     network_get_my_address(temp);
-    //create header (miniheader.h has type def)
+    //create the header (miniheader.h has type def)
     header->protocol = PROTOCOL_MINISTREAM;
     pack_address(header->source_address,temp);
     pack_address(header->destination_address,socket->remote_address);
@@ -294,7 +308,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 	header->msg_type = MSG_ACK;
 	pack_unsigned_int(header->seq_number,(unsigned int) socket->seq_number);
     pack_unsigned_int(header->ack_number,(unsigned int) socket->ack_number);
-
+    // send a segment if packet is too big
     if (len + sizeof(*header) > MAX_NETWORK_PKT_SIZE){ // if too big send max size;
     	len = MAX_NETWORK_PKT_SIZE - sizeof(*header);
     }
@@ -338,8 +352,17 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
  */
 int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisocket_error *error)
 {
-	//if initialized = 0 then thread is unitinitialized or dying return SOCKET_RECEIVEERROR
-	//just P on the outer queue lock and the queue sema and then pop off of data queue and V outer queue lock
+	minimsg_t temp;
+	if (socket->initialized == 0){ //thread is unitinitialized or dying
+		error = SOCKET_RECEIVEERROR;
+		return -1;
+	} 	
+	semaphore_P(socket->outer_receieve_sema);
+		semaphore_P(socket->receive_sema);
+			queue_dequeue(socket->packet_queue,temp);
+		semaphore_V(socket->receive_sema);
+	semaphore_V(socket->outer_receieve_sema);
+	return sizeof(*msg);
 }
 
 /* Close a connection. If minisocket_close is issued, any send or receive should
