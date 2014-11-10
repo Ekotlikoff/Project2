@@ -393,20 +393,29 @@ network_handler(network_interrupt_arg_t* packet){
     // if control -> call socket's function
     // if data    -> call socket's handle data
     // if PROTOCOL_MINIDATAGRAM
+    if(header->protocol==PROTOCOL_MINIDATAGRAM) {
         if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
-        if(packet) {
-            free(packet);
+            if(packet) {
+                free(packet);
+            }
+            set_interrupt_level(last);
+            return;
         }
-        set_interrupt_level(last);
+        else { //otherwise store it in the deisgnated port's queue to be received and free it later
+            this_port = miniport_create_unbound(port_num);
+            queue_append(port_get_queue(this_port),(void*)packet);
+            semaphore_V(port_get_sema(this_port));
+            set_interrupt_level(last);
+            return;
+       }
+    }
+    else if(header->protocol==PROTOCOL_MINISTREAM) {
+
+
+    }
+    else {
         return;
     }
-    else { //otherwise store it in the deisgnated port's queue to be received and free it later
-        this_port = miniport_create_unbound(port_num);
-        queue_append(port_get_queue(this_port),(void*)packet);
-        semaphore_V(port_get_sema(this_port));
-        set_interrupt_level(last);
-        return;
-   }
 }
 
 /*
