@@ -59,7 +59,7 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//else drop
 	if(header->message_type == MSG_SYN && *header->seq_number == socket->ack_number+1)  {
 			socket->ack_number++;
-            unpack_address((header->source_address),socket->remote_address)
+            unpack_address((header->source_address),socket->remote_address);
             socket->remote_port = unpack_unsigned_short(header->source_port);
             semaphore_V(socket->server_waiting);
             set_handle(socket,2);
@@ -94,6 +94,7 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
         else if(header->message_type == MSG_ACK && *header->ack_number == socket->seq_number) {
         	socket->initialized = 1;
 		}
+            }
 	else {
 		//if MSG_SYN send back MSG_FIN to tell client that this socket is busy
 		//if ack from paired socket and its seq = this ack set flag for ack received?
@@ -138,7 +139,7 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
             socket->initialized = 0;
             //ALARM?
             return;
-		}
+            }
 	}
 }
 // CLIENT
@@ -147,6 +148,7 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
 	//MSG_ACK and set flag to initialize /set_handle(socket, -2)
 	//if it's a MSG_FIN set socket's socket_busy flag to 1, server will be
 	//checking this flag during initialization and return SOCKET_BUSY error
+        return;
 }
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_client (minisocket_t socket, mini_header_reliable_t header){ //-2
@@ -157,6 +159,7 @@ void handle_control_client (minisocket_t socket, mini_header_reliable_t header){
 	//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the
 	//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 	//numbers.
+        return;
 }
 // END OF CONTROL FLOW FUNCTIONS
 
@@ -167,6 +170,7 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header){
 	// paired socket, the handshake ack was lost, so this current packet represents that ack, so set initialized flag to 1)
 	// otherwise if initialized is 1 and this is a paired socket add to queue adjust queue sema reply with
 	// ack and adjust seq/ack number
+        return;
 }
 
 minisocket_t get_socket(int port_number){
@@ -548,4 +552,5 @@ void minisocket_close(minisocket_t socket)
 	// Set initialized to 0 and send FIN packet to socket and retransmit waiting for an ack received back, upon ack or after 7, reset everything
 	// semaphore_wake_all(data_available);
 	// after fin receives/sends on this socket should fail
+        return;
 }
