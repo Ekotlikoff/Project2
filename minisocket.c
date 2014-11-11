@@ -57,7 +57,7 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
-	if(header->message_type == MSG_SYN && *header->seq_number == socket->ack_number+1)  {
+	if(header->message_type == MSG_SYN && unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 			socket->ack_number++;
             unpack_address((header->source_address),socket->remote_address);
             socket->remote_port = unpack_unsigned_short(header->source_port);
@@ -80,21 +80,12 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
 		// else if is MSG_ACK with ack == seq ack notify the socket by setting initialize flag to 1
 		if(header->message_type==MSG_SYN &&
             (this_port!=socket->remote_port || network_compare_network_addresses(this_network_address,socket->remote_address)==0)) {
-                response->protocol = PROTOCOL_MINISTREAM;
-                pack_address(response->destination_address,this_network_address);
-                pack_address(response->source_address,myaddress);
-                pack_unsigned_short(response->destination_port,this_port);
-                pack_unsigned_short(response->source_port,socket->port_number);
-                response->message_type = MSG_FIN;
-                pack_unsigned_int(response->seq_number, socket->seq_number);
-                pack_unsigned_int(response->ack_number, socket->ack_number);// I DON'T KNOW WHAT VALUE TO PLACE
-                network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)header,0,NULL);
-                return;
+			send_control(socket,header,MSG_FIN);
 		}
-        else if(header->message_type == MSG_ACK && *header->ack_number == socket->seq_number) {
+        else if(header->message_type == MSG_ACK && unpack_unsigned_int(header->ack_number) == socket->seq_number) {
         	socket->initialized = 1;
 		}
-            }
+    }
 	else {
 		//if MSG_SYN send back MSG_FIN to tell client that this socket is busy
 		//if ack from paired socket and its seq = this ack set flag for ack received?
@@ -105,50 +96,47 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
 		//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 		//numbers.
 		if(header->message_type == MSG_SYN ) {
-            response->protocol = PROTOCOL_MINISTREAM;
-            pack_address(response->destination_address,this_network_address);
-            pack_address(response->source_address,myaddress);
-            pack_unsigned_short(response->destination_port,this_port);
-            pack_unsigned_short(response->source_port,socket->port_number);
-            response->message_type = MSG_FIN;
-            pack_unsigned_int(response->seq_number, socket->seq_number);
-            pack_unsigned_int(response->ack_number, socket->ack_number);
-            network_send_pkt((unsigned int*)(response->destination_address),sizeof(struct mini_header_reliable),(char*)header,0,NULL);
-            return;
+            send_control(socket,header,MSG_FIN);
 		}
 		else if (header->message_type == MSG_ACK &&
         this_port==socket->remote_port &&
-        (network_compare_network_addresses(this_network_address,socket->remote_address)!=0)) {
-            if(*header->ack_number == socket->seq_number) {
-                socket->send_ack_received = 1;
-            }
-            return;
+        (network_compare_network_addresses(this_network_address,socket->remote_address)!=0) &&
+        unpack_unsigned_int(header->ack_number) == socket->seq_number) {
+            socket->send_ack_received = 1;
 		}
 		else if (header->message_type == MSG_FIN &&
         this_port==socket->remote_port &&
         (network_compare_network_addresses(this_network_address,socket->remote_address)!=0)) {
-            response->protocol = PROTOCOL_MINISTREAM;
-            pack_address(response->destination_address,this_network_address);
-            pack_address(response->source_address,myaddress);
-            pack_unsigned_short(response->destination_port,this_port);
-            pack_unsigned_short(response->source_port,socket->port_number);
-            response->message_type = MSG_ACK;
-            pack_unsigned_int(response->seq_number, socket->seq_number);
-            pack_unsigned_int(response->ack_number, socket->ack_number);
-            network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)header,0,NULL);
+            send_control(socket,header,MSG_ACK);
             socket->initialized = 0;
             //ALARM?
-            return;
-            }
+ 		}
 	}
 }
 // CLIENT
 void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
 	//if MSG_SYNACK -> if from same server and it seq = this ack + 1 if so set this ack = seq and reply with
-	//MSG_ACK and set flag to initialize /set_handle(socket, -2)
-	//if it's a MSG_FIN set socket's socket_busy flag to 1, server will be
+	//MSG_ACK and set flag to initialized /set_handle(socket, -2)
+	//if it's a MSG_FIN set socket's socket_busy flag to 1, client will be
 	//checking this flag during initialization and return SOCKET_BUSY error
-        return;
+	network_address_t this_network_address;
+    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
+    unsigned short int this_port;
+    mini_header_reliable_t response = &resp;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
+	if(header->message_type == MSG_SYNACK && 
+	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
+	   this_port == socket->remote_port &&
+	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
+			send_control(socket,header,MSG_ACK);
+			set_handle(socket,-2);
+	}
+	else if(header->message_type == MSG_FIN){
+		socket->socket_busy = 1;
+	}
 }
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_client (minisocket_t socket, mini_header_reliable_t header){ //-2
@@ -171,6 +159,30 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header){
 	// otherwise if initialized is 1 and this is a paired socket add to queue adjust queue sema reply with
 	// ack and adjust seq/ack number
         return;
+}
+
+//send a reply control packet of type message_type using this socket and incoming header
+void send_control(minisocket_t socket, mini_header_reliable_t header, char message_type){
+	network_address_t this_network_address;
+    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
+    unsigned short int this_port;
+    mini_header_reliable_t response = &resp;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
+	socket->ack_number++;
+	socket->initialized=1;
+	//reply with MSG_ACK
+	response->protocol = PROTOCOL_MINISTREAM;
+    pack_address(response->destination_address,this_network_address);
+    pack_address(response->source_address,myaddress);
+    pack_unsigned_short(response->destination_port,this_port);
+    pack_unsigned_short(response->source_port,socket->port_number);
+    response->message_type = message_type;
+    pack_unsigned_int(response->seq_number, socket->seq_number);
+    pack_unsigned_int(response->ack_number, socket->ack_number);
+    network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
 }
 
 minisocket_t get_socket(int port_number){

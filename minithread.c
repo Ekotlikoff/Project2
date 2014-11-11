@@ -416,13 +416,18 @@ network_handler(network_interrupt_arg_t* packet){
         r_header = (mini_header_reliable_t)packet->buffer;
         socket = get_socket(port_num);
         if (socket == NULL){
+            set_interrupt_level(last);
             return;
         }
         if (packet->size - sizeof(*r_header) == 0){ //control flow
             get_handle_function(socket)(socket,r_header); //call the control function
+            set_interrupt_level(last);
+            return;
         } 
         else{
             handle_data(socket,r_header);
+            set_interrupt_level(last);
+            return;
         }
     }
 }
