@@ -167,7 +167,27 @@ void handle_control_client (minisocket_t socket, mini_header_reliable_t header){
 	//the another endpoint. This condition is detected through discrepancies between the sender's sequence number and the
 	//receiver's acknowledgement number. Refer to the slides for more information about sequence numbers and acknowledgement
 	//numbers.
-        return;
+	network_address_t this_network_address;
+    unsigned short int this_port;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
+	if (header->message_type == MSG_ACK &&
+    this_port==socket->remote_port &&
+    (network_compare_network_addresses(this_network_address,socket->remote_address)!=0) &&
+    unpack_unsigned_int(header->ack_number) == socket->seq_number) {
+        socket->send_ack_received = 1;
+    }
+    else if (header->message_type == MSG_FIN &&
+    this_port==socket->remote_port &&
+    (network_compare_network_addresses(this_network_address,socket->remote_address)!=0)) {
+        send_control(socket,header,MSG_ACK);
+        if (socket->initialized == 1){
+            register_alarm(15000,reset_all,(void*)socket);
+        }
+        socket->initialized = 0;
+    }
 }
 // END OF CONTROL FLOW FUNCTIONS
 
