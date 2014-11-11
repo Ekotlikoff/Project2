@@ -419,8 +419,11 @@ network_handler(network_interrupt_arg_t* packet){
             return;
         }
         if (packet->size - sizeof(*r_header) == 0){ //control flow
-            get_handle_function(socket);
+            get_handle_function(socket)(socket,r_header); //call the control function
         } 
+        else{
+            handle_data(socket,r_header);
+        }
     }
 }
 
