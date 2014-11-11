@@ -48,18 +48,18 @@ void send_control(minisocket_t socket, mini_header_reliable_t header, char messa
 void reset_all(void* s){
 	minisocket_t socket = (minisocket_t) s;
 	socket->in_use = 0;
-	socket->remote_address = NULL;
-	socket->remote_port = NULL;
+	//socket->remote_address = NULL;
+	socket->remote_port = 0;
 	socket->initialized = 0;
 	socket->socket_busy = 0;
 	socket->send_ack_received = 0;
 	socket->seq_number = 0;
 	socket->ack_number = 0;
-	semaphore_initialize(server_waiting,0);
-	semaphore_initialize(receive_sema,0);
-	semaphore_initialize(outer_receieve_sema,1);
-	semaphore_initialize(send_sema,0);
-	semaphore_initialize(outer_send_sema,1);
+	semaphore_initialize(socket->server_waiting,0);
+	semaphore_initialize(socket->receive_sema,0);
+	semaphore_initialize(socket->outer_receieve_sema,1);
+	semaphore_initialize(socket->send_sema,0);
+	semaphore_initialize(socket->outer_send_sema,1);
 }
 
 // returns current control flow function, see below for all the options
@@ -573,31 +573,30 @@ void minisocket_close(minisocket_t socket)
 	// Set initialized to 0 and send FIN packet to socket and retransmit waiting for an ack received back, upon ack or after 7, reset everything
 	// semaphore_wake_all(data_available);
 	// after fin receives/sends on this socket should fail
-    socket->initialized = 0;
     struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
-    mini_header_reliable_t response = &resp;
+    mini_header_reliable_t fin = &resp;
     network_address_t myaddress;
-    network_get_my_address(myaddress);
     int loop_nums = 0;
     int timeout = 100;
+    socket->initialized = 0;
+    network_get_my_address(myaddress);
 
-
-	response->protocol = PROTOCOL_MINISTREAM;
-    pack_address(response->destination_address,socket->remote_address);
-    pack_address(response->source_address,myaddress);
-    pack_unsigned_short(response->destination_port,socket->remote_port);
-    pack_unsigned_short(response->source_port,socket->port_number);
-    response->message_type = MSG_FIN;
-    pack_unsigned_int(response->seq_number, socket->seq_number);
-    pack_unsigned_int(response->ack_number, socket->ack_number);
+    fin->protocol = PROTOCOL_MINISTREAM;
+    pack_address(fin->destination_address,socket->remote_address);
+    pack_address(fin->source_address,myaddress);
+    pack_unsigned_short(fin->destination_port,socket->remote_port);
+    pack_unsigned_short(fin->source_port,socket->port_number);
+    fin->message_type = MSG_FIN;
+    pack_unsigned_int(fin->seq_number, socket->seq_number);
+    pack_unsigned_int(fin->ack_number, socket->ack_number);
 	while (socket->send_ack_received == 0 || loop_nums < 8) {
 		loop_nums += 1;
 //  		register alarm to V send_lock after timeout
 		register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
 //  		network_send
-		bytes_sent = network_send_pkt(socket->remote_address,
-         	sizeof(*header), (char*)header,
-         	len, msg);
+		network_send_pkt(socket->remote_address,
+         	sizeof(*fin), (char*)fin,
+         	0, NULL);
 //			P send_lock:
 		semaphore_P(socket->send_sema);
 //			double timeout
