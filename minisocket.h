@@ -60,7 +60,7 @@ extern minisocket_t get_socket(int port_number);
 extern void (*get_handle_function(minisocket_t socket))(minisocket_t, mini_header_reliable_t);
 
 // used by network handler to handle data packet
-extern void handle_data(minisocket_t socket,mini_header_reliable_t header);
+extern void handle_data(minisocket_t socket,mini_header_reliable_t header,char* buf);
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize();

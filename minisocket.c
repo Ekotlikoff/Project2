@@ -210,10 +210,11 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data
     if (socket->initialized == 0){
     	socket->initialized = 1;
     }
-    queue_enqueue(socket->packet_queue,(void*) data);
+    queue_append(socket->packet_queue,(void*) data);
     semaphore_V(socket->receive_sema);
     socket->ack_number++;
     send_control(socket,header,MSG_ACK);
+    }
 }
 
 minisocket_t get_socket(int port_number){
