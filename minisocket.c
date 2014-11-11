@@ -55,7 +55,8 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
-	if(header->seq_number == socket->ack_number+1)  {
+	if(header->message_type == MSG_SYN && header->seq_number == socket->ack_number+1)  {
+			socket->ack_number++;
             semaphore_V(server_waiting);
             unpack_address((header->source_address),socket->remote_address)
             socket->remote_port = unpack_unsigned_short(header->source_port);
@@ -65,7 +66,7 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_server (minisocket_t socket, mini_header_reliable_t header){ //2
     network_address_t this_network_address;
-    struct mini_header_reliable response;
+    struct mini_header_reliable response; //should be malloc'd?
     unsigned short int this_port;
     network_address_t myaddress;
     network_get_my_address(myaddress);
@@ -87,7 +88,7 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
                 network_send_pkt(response->destination_address,sizeof(mini_header_reliable),header,0,NULL);
                 return;
 		}
-        else if(header->message_type == MSG_ACK && header->ack_number == socket->sequence) {
+        else if(header->message_type == MSG_ACK && header->seq_number == socket->ack_number) {
             socket->initialized = 1;
             return;
         }
