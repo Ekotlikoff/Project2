@@ -419,7 +419,7 @@ network_handler(network_interrupt_arg_t* packet){
             set_interrupt_level(last);
             return;
         }
-        if (packet->size - sizeof(*r_header) == 0){ //control flow
+        if (packet->size - sizeof(*r_header) == 0 || socket->initialized == 0){ //control flow and if socket still ain't initted
             get_handle_function(socket)(socket,r_header); //call the control function
             set_interrupt_level(last);
             return;

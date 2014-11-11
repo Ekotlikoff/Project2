@@ -21,6 +21,7 @@ struct minisocket
 	int               port_number;
 	network_address_t remote_address;
 	int 			  remote_port;
+	int 			  in_use;
 	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
 	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
 	int 			  send_ack_received;
@@ -34,7 +35,6 @@ struct minisocket
 	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
 	void (*handle)(minisocket_t, mini_header_reliable_t);//handle 			  handle_function; //pointer to current control flow handling function
 };
-
 
 void set_handle (minisocket_t, int);
 // big array of clients and servers
@@ -52,9 +52,7 @@ void send_control(minisocket_t socket, mini_header_reliable_t header, char messa
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
-	socket->ack_number++;
-	socket->initialized=1;
-	//reply with MSG_ACK
+
 	response->protocol = PROTOCOL_MINISTREAM;
     pack_address(response->destination_address,this_network_address);
     pack_address(response->source_address,myaddress);
@@ -66,7 +64,10 @@ void send_control(minisocket_t socket, mini_header_reliable_t header, char messa
     network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
 }
 
-
+void reset_all(void* s){
+	minisocket_t socket = (minisocket_t) s;
+	socket->
+}
 
 // returns current control flow function, see below for all the options
 void (*get_handle_function(minisocket_t socket))(minisocket_t, mini_header_reliable_t){
@@ -154,6 +155,8 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
 	   this_port == socket->remote_port &&
 	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 			send_control(socket,header,MSG_ACK);
+			socket->ack_number++;
+			socket->initialized=1;
 			set_handle(socket,-2);
 	}
 	else if(header->message_type == MSG_FIN){
@@ -245,13 +248,19 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 		*error = SOCKET_INVALIDPARAMS;
 		return NULL;
 	}
-	if (ports[port] != NULL){
+	if (ports[port] != NULL && ports[port]->in_use == 1){ //else it's either NULL or has been closed
 		*error = SOCKET_PORTINUSE;
 		return NULL;
 	}
 	// create socket
-	this_socket    		          	 = (minisocket_t)malloc(sizeof(struct minisocket));
+	if (ports[port] != NULL){
+		this_socket = ports[port];
+	}
+	else{
+		this_socket    		          	 = (minisocket_t)malloc(sizeof(struct minisocket));
+	}
 	this_socket->port_number  		 = port;
+	this_socket->in_use 			 = 1;
 	this_socket->seq_number       	 = 0;
 	this_socket->ack_number       	 = 0;
 	//flags, for communication with network_handler
@@ -335,7 +344,7 @@ int find_next_client_port() {
     }
     else {
 	    for (;counter<client_upperbound;counter++){
-	        if (ports[counter] == NULL){
+	        if (ports[counter] == NULL || ports[counter]->in_use == 0){
 	            return counter;
 	        }
 	    }
@@ -372,8 +381,14 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
     	*error = SOCKET_NOMOREPORTS;
     	return NULL;
     }
-    this_socket    		          	 = (minisocket_t)malloc(sizeof(struct minisocket));
+    if (ports[this_port_number] != NULL){
+		this_socket = ports[port];
+	}
+	else{
+		this_socket    		          	 = (minisocket_t)malloc(sizeof(struct minisocket));
+	}
     this_socket->port_number  		 = this_port_number;
+   	this_socket->in_use 			 = 1;
 	// set remote addr and port
     network_address_copy(addr,this_socket->remote_address);
     this_socket->remote_port         = port;
