@@ -18,6 +18,7 @@
 #include "network.h"
 #include "miniheader.h"
 #include "minimsg.h"
+#include "minisocket.h"
 
 #include <assert.h>
 
@@ -382,6 +383,8 @@ void
 network_handler(network_interrupt_arg_t* packet){
     miniport_t this_port;
     mini_header_t header;
+    mini_header_reliable_t r_header;
+    minisocket_t socket;
     interrupt_level_t last = set_interrupt_level(DISABLED);
     int port_num;
     header = (mini_header_t)packet->buffer;
@@ -410,10 +413,14 @@ network_handler(network_interrupt_arg_t* packet){
        }
     }
     else if(header->protocol==PROTOCOL_MINISTREAM) {
-        return;
-    }
-    else {
-        return;
+        r_header = (mini_header_reliable_t)packet->buffer;
+        socket = get_socket(port_num);
+        if (socket == NULL){
+            return;
+        }
+        if (packet->size - sizeof(*r_header) == 0){ //control flow
+            get_handle_function(socket);
+        } 
     }
 }
 

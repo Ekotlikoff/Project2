@@ -66,7 +66,7 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_server (minisocket_t socket, mini_header_reliable_t header){ //2
     network_address_t this_network_address;
-    struct mini_header_reliable response; //should be malloc'd?
+    mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
     unsigned short int this_port;
     network_address_t myaddress;
     network_get_my_address(myaddress);
