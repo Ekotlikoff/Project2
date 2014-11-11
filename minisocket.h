@@ -13,7 +13,7 @@
 
 #include "network.h"
 #include "minimsg.h"
-
+#include "miniheader.h"
 typedef struct minisocket* minisocket_t;
 typedef enum minisocket_error minisocket_error;
 
@@ -31,20 +31,20 @@ enum minisocket_error {
 };
 
 // type of handle control packet function, each socket has one of these
-typedef void (*handle)(minisocket_t, mini_header_t); /* pointer to current handling function, each socket should have one eh'? */
+//typedef void (*handle)(minisocket_t, mini_header_reliable_t); /* pointer to current handling function, each socket should have one eh'? */
 
 extern minisocket_t get_socket(int port_number);
 
 // returns this sockets current control flow function to be used on control flow packets
-extern handle get_handle_function(minisocket_t socket);
+extern void (*get_handle_function(minisocket_t socket))(minisocket_t, mini_header_reliable_t);
 
 // used by network handler to handle data packet
-extern void handle_data(mini_header_t header);
+extern void handle_data(minisocket_t socket,mini_header_reliable_t header);
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize();
 
-/* 
+/*
  * Listen for a connection from somebody else. When communication link is
  * created return a minisocket_t through which the communication can be made
  * from now on.
@@ -62,7 +62,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error);
  * established create a minisocket through which the communication can be made
  * from now on.
  *
- * The first argument is the network address of the remote machine. 
+ * The first argument is the network address of the remote machine.
  *
  * The argument "port" is the port number on the remote machine to which the
  * connection is made. The port number of the local machine is one of the free
@@ -73,7 +73,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error);
  */
 minisocket_t minisocket_client_create(network_address_t addr, int port, minisocket_error *error);
 
-/* 
+/*
  * Send a message to the other end of the socket.
  *
  * The send call should block until the remote host has ACKnowledged receipt of
@@ -112,6 +112,6 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
  * send or receive in progress. The minisocket is destroyed by minisocket_close
  * function.  The function should never fail.
  */
-void minisocket_close(minisocket_t socket); 
+void minisocket_close(minisocket_t socket);
 
 #endif /* __MINISOCKETS_H_ */
