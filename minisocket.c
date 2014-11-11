@@ -57,9 +57,10 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
-	if(*header->seq_number == socket->ack_number+1)  {
+	if(header->message_type == MSG_SYN && *header->seq_number == socket->ack_number+1)  {
+			socket->ack_number++;
             semaphore_V(socket->server_waiting);
-            unpack_address((header->source_address),socket->remote_address);
+            unpack_address((header->source_address),socket->remote_address)
             socket->remote_port = unpack_unsigned_short(header->source_port);
             set_handle(socket,2);
 	}
@@ -91,9 +92,6 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
                 return;
 		}
         else if(header->message_type == MSG_ACK && *header->ack_number == socket->seq_number) {
-            socket->initialized = 1;
-            return;
-        }
 
 	}
 	else {
