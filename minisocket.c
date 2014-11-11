@@ -16,25 +16,6 @@
 #define NULL 0
 #endif
 
-struct minisocket
-{
-	int               port_number;
-	network_address_t remote_address;
-	int 			  remote_port;
-	int 			  in_use;
-	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
-	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
-	int 			  send_ack_received;
-	semaphore_t 	  server_waiting; //sema(0) for server waiting for connection
-	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and
-	semaphore_t 	  outer_receieve_sema; //outer sema(1)
-	queue_t 		  packet_queue;
-	int 			  seq_number;
-	int 			  ack_number;
-	semaphore_t  	  send_sema; //(0) used for retransmissions in send and init
-	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
-	void (*handle)(minisocket_t, mini_header_reliable_t);//handle 			  handle_function; //pointer to current control flow handling function
-};
 
 void set_handle (minisocket_t, int);
 // big array of clients and servers
@@ -164,7 +145,7 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
-	if(header->message_type == MSG_SYNACK && 
+	if(header->message_type == MSG_SYNACK &&
 	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
 	   this_port == socket->remote_port &&
 	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {

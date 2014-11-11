@@ -14,9 +14,30 @@
 #include "network.h"
 #include "minimsg.h"
 #include "miniheader.h"
-typedef struct minisocket* minisocket_t;
-typedef enum minisocket_error minisocket_error;
 
+struct minisocket
+{
+	int               port_number;
+	network_address_t remote_address;
+	int 			  remote_port;
+	int 			  in_use;
+	int 			  initialized; // = 0 (set to 1 if ack received after SYNACK (SERVER) and 1 if ack sent(client)) (0 if dying)
+	int 			  socket_busy; // = 0 (set to 1 if client tried to connect to already paired server)
+	int 			  send_ack_received;
+	semaphore_t 	  server_waiting; //sema(0) for server waiting for connection
+	semaphore_t 	  receive_sema;//(0) for queue (for receive calls to P on and data_handle to V on) and
+	semaphore_t 	  outer_receieve_sema; //outer sema(1)
+	queue_t 		  packet_queue;
+	int 			  seq_number;
+	int 			  ack_number;
+	semaphore_t  	  send_sema; //(0) used for retransmissions in send and init
+	semaphore_t 	  outer_send_sema; //(1) to make sure only one person is manipulating send_sema at a time
+	void (*handle)(struct minisocket*, mini_header_reliable_t);//pointer to current control flow handling function
+};
+
+typedef struct minisocket* minisocket_t;
+
+typedef enum minisocket_error minisocket_error;
 
 enum minisocket_error {
   SOCKET_NOERROR=0,
