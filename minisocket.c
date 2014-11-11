@@ -77,7 +77,6 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
-        printf("in handle syn\n");
 	if(header->message_type == MSG_SYN && unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 			socket->ack_number++;
             unpack_address((header->source_address),socket->remote_address);
@@ -102,7 +101,6 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
 			send_control(socket,header,MSG_FIN);
 		}
         else if(header->message_type == MSG_ACK && unpack_unsigned_int(header->ack_number) == socket->seq_number) {
-                printf("setting initialized to 1!\n");
         	socket->initialized = 1;
 		}
     }
@@ -147,15 +145,14 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
-        printf("in handle_synack\n");
 
 	if(header->message_type == MSG_SYNACK &&
 	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
 	   this_port == socket->remote_port &&
 	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
-                        printf("recognized and replying\n");
 			socket->ack_number++;
 			send_control(socket,header,MSG_ACK);
+                        printf("client setting initialized to 1\n");
 			socket->initialized=1;
 			set_handle(socket,-2);
 	}
@@ -205,7 +202,6 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
-    printf("HANDLEDATA: in handle data! incoming seq number %i =? this ack_number %i + 1\n", unpack_unsigned_int(header->seq_number),socket->ack_number);
 	if(
 	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
 	   this_port == socket->remote_port &&
@@ -217,7 +213,6 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data
     if (socket->initialized == 0){
     	socket->initialized = 1;
     }
-    printf("HANDLE_DATA: appending data!\n");
     queue_append(socket->packet_queue,(void*) data);
     semaphore_V(socket->receive_sema);
     socket->ack_number++;
@@ -254,6 +249,7 @@ void set_handle (minisocket_t socket, int state) {
 
 // alarm function to wakeup the sending thread for retransmission
 void send_alarm_helper(void* sema){
+        printf("SEMA ADDR = %p\n", sema);
 	semaphore_V ((semaphore_t) sema);
 }
 
@@ -339,7 +335,6 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 //	set timeout to 100ms
 	timeout = 100;
 //	LOOP while (initialized not raised)
-        printf("server sending MSG_SYNACK\n");
 	while (this_socket->initialized == 0) {
 		loop_nums += 1;
 //		if has looped 7 times server should reset the port and go back to listening mode
@@ -355,6 +350,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
    			pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
 		}
 //  	register alarm to V send_lock after timeout
+                printf("SERVER: registering alarm\n");
 		register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
 //  	network_send
 		network_send_pkt(this_socket->remote_address,
@@ -466,35 +462,42 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	// if none after 7 return SOCKET_NOSERVER and reset remote addr and port
 //	set timeout to 100ms
 	timeout = 100;
-        printf("client sending MSG_SYN\n");
 //	LOOP while (initialized not raised)
+        printf("client sending syn\n");
 	while (this_socket->initialized == 0) {
 		loop_nums += 1;
 //		if has looped 7 times client should return SOCKET_BUSY reset and return
 		if (loop_nums == 8){
+                        printf("MINISOCKED_CLIENT_CREATE: noserver\n");
 			*error = SOCKET_NOSERVER;
 			network_address_blankify(this_socket->remote_address);
 			this_socket->remote_port = 0;
 			return NULL;
 		}
 		if (this_socket->socket_busy){
+                        printf("MINISOCKED_CLIENT_CREATE: socket busy\n");
 			*error = SOCKET_BUSY;
 			network_address_blankify(this_socket->remote_address);
 			this_socket->remote_port = 0;
 			return NULL;
 		}
 //  	register alarm to V send_lock after timeout
-		register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
+		register_alarm(timeout,send_alarm_helper,(void*)(this_socket->send_sema)); 
+                printf("SEND_SEMA_ADDR = %p\n", this_socket->send_sema);
 //  	network_send
 		network_send_pkt(this_socket->remote_address,
             sizeof(*syn), (char*)syn,
             0, NULL);
 //		P send_lock:
+                //semaphore_V(this_socket->send_sema);
+                printf("CLIENT: timeouting\n");
 		semaphore_P(this_socket->send_sema);
 //		double timeout
 		timeout = timeout * 2;
+                printf("CLIENT: client checking for initialized==1\n");
 	}
 	free(syn);
+        printf("client created\n");
 	// CLIENT AND SERVER ARE NOW LINKED
 	return this_socket;
 }
@@ -577,7 +580,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 		socket->send_ack_received = 0;
 		free(header);
 	semaphore_V(socket->outer_send_sema);
-	return bytes_sent;
+	return bytes_sent - sizeof(*header);
 }
 
 /*
