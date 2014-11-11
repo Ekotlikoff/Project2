@@ -126,6 +126,9 @@ miniport_create_bound(network_address_t addr, int remote_unbound_port_number)
         this_port_number = *current_bound;
         current_bound++;
     }
+    if (this_port_number == -1){
+        return NULL;
+    }
     this_port    		                 = (miniport_t)malloc(sizeof(miniport));
     this_port->type		                 = BOUND;
     this_port->port_number 	    		 = this_port_number;

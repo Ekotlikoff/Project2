@@ -420,12 +420,12 @@ network_handler(network_interrupt_arg_t* packet){
             return;
         }
         if (packet->size - sizeof(struct mini_header_reliable) == 0 || socket->initialized == 0){ //control flow and if socket still ain't initted
-            get_handle_function(socket)(socket,r_header); //call the control function
+            get_handle_function(socket)(socket,r_header,); //call the control function
             set_interrupt_level(last);
             return;
         }
         else{
-            handle_data(socket,r_header);
+            handle_data(socket,r_header,(packet->buffer)+sizeof(struct mini_header_reliable));
             set_interrupt_level(last);
             return;
         }

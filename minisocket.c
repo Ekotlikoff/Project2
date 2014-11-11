@@ -172,13 +172,28 @@ void handle_control_client (minisocket_t socket, mini_header_reliable_t header){
 // END OF CONTROL FLOW FUNCTIONS
 
 // BELOW IS EXPOSED IN HEADER FOR NETWORK HANDLER TO DIRECTLY USE
-void handle_data (minisocket_t socket, mini_header_reliable_t header){
-
+void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data){
+	network_address_t this_network_address;
+    unsigned short int this_port;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
+	if(
+	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
+	   this_port == socket->remote_port &&
+	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 	// check and see if from paired socket (and that initialized flag is 1) (if initialized flag is 0, but we're the correctly
 	// paired socket, the handshake ack was lost, so this current packet represents that ack, so set initialized flag to 1)
 	// otherwise if initialized is 1 and this is a paired socket add to queue adjust queue sema reply with
 	// ack and adjust seq/ack number
-        return;
+    if (socket->initialized == 0){
+    	socket->initialized = 1;
+    }
+    queue_enqueue(socket->packet_queue,(void*) data);
+    semaphore_V(socket->receive_sema);
+    socket->ack_number++;
+    send_control(socket,header,MSG_ACK);
 }
 
 minisocket_t get_socket(int port_number){
