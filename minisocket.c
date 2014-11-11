@@ -588,6 +588,7 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 	}
 	semaphore_P(socket->outer_receieve_sema);
 		semaphore_P(socket->receive_sema);
+                        printf("Dequeueing\n");
 			queue_dequeue(socket->packet_queue,(void**)&temp);
 		semaphore_V(socket->receive_sema);
 	semaphore_V(socket->outer_receieve_sema);

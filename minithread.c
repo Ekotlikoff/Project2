@@ -229,7 +229,7 @@ minithread_yield() {
         }
         else
         {
-            if(!(currentThread->isDead) || currentThread == deletionThread)
+            if((currentThread->isDead) || currentThread == deletionThread)
             {
                 printf("No availiable threads. Go Idle.\n");
                 set_interrupt_level(ENABLED);

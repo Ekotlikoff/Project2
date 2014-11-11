@@ -71,11 +71,13 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 {
     double millis_per_tick;
 	int ticks_to_wait;
-	void* item;
+	tuple* item;
     alarm* new;
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
-    item = (void *)malloc(sizeof(int));
+    item = (tuple *)malloc(sizeof(tuple));
+    item->snd = malloc(sizeof(int));
+    item->snd = 0;
 	new = (alarm *)malloc(sizeof(alarm));
 	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
@@ -85,8 +87,14 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 	new->when_to_execute = get_clock_ticks() + ticks_to_wait;
 	new->alarm = alarm_f;
 	new->arg = arg;
-	queue_iterate(alarm_queue,func,item);
-	queue_insert(alarm_queue,(void *)new,*(int*)item);
+    item->fst = (int*)&(new->when_to_execute);
+	queue_iterate(alarm_queue,func,(void*)item);
+    if (queue_length(alarm_queue) == 0){
+        queue_append(alarm_queue,(void*)new);
+    }
+    else{
+	    queue_insert(alarm_queue,(void *)new,*(int*)item->snd);
+    }
 	set_interrupt_level(old_interrupt_level);
     return new;
 }

@@ -63,10 +63,11 @@ int transmit(int* arg) {
   minisocket_t socket;
   minisocket_error error;
   minithread_t receiver;
-
+  printf("forking\n");
   receiver = minithread_fork(receive, NULL);
-
+  printf("creating server\n");
   socket = minisocket_server_create(port,&error);
+  printf("server unblocked\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
@@ -110,6 +111,7 @@ int receive(int* arg) {
   network_address_t my_address;
   minisocket_t socket;
   minisocket_error error;
+  printf("in receive\n");
 
   /* 
    * It is crucial that this minithread_yield() works properly
@@ -119,10 +121,13 @@ int receive(int* arg) {
    */
   minithread_yield();
   
+  printf("past yield\n");
   network_get_my_address(my_address);
   
   /* create a network connection to the local machine */
+  printf("creating client\n");
   socket = minisocket_client_create(my_address, port,&error);
+  printf("created\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
