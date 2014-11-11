@@ -42,6 +42,32 @@ minisocket_t ports[client_upperbound];
 //current client port number
 int* current_client;
 
+//send a reply control packet of type message_type using this socket and incoming header
+void send_control(minisocket_t socket, mini_header_reliable_t header, char message_type){
+	network_address_t this_network_address;
+    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
+    unsigned short int this_port;
+    mini_header_reliable_t response = &resp;
+    network_address_t myaddress;
+    network_get_my_address(myaddress);
+    unpack_address(header->source_address,this_network_address);
+    this_port = unpack_unsigned_short(header->source_port);
+	socket->ack_number++;
+	socket->initialized=1;
+	//reply with MSG_ACK
+	response->protocol = PROTOCOL_MINISTREAM;
+    pack_address(response->destination_address,this_network_address);
+    pack_address(response->source_address,myaddress);
+    pack_unsigned_short(response->destination_port,this_port);
+    pack_unsigned_short(response->source_port,socket->port_number);
+    response->message_type = message_type;
+    pack_unsigned_int(response->seq_number, socket->seq_number);
+    pack_unsigned_int(response->ack_number, socket->ack_number);
+    network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
+}
+
+
+
 // returns current control flow function, see below for all the options
 void (*get_handle_function(minisocket_t socket))(minisocket_t, mini_header_reliable_t){
 	return socket->handle;
@@ -68,10 +94,8 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 // SERVER AND CLIENT ARE NOW PAIRED
 void handle_control_server (minisocket_t socket, mini_header_reliable_t header){ //2
     network_address_t this_network_address;
-    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
     unsigned short int this_port;
     network_address_t myaddress;
-    mini_header_reliable_t response = &resp;
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
@@ -120,9 +144,7 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
 	//if it's a MSG_FIN set socket's socket_busy flag to 1, client will be
 	//checking this flag during initialization and return SOCKET_BUSY error
 	network_address_t this_network_address;
-    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
     unsigned short int this_port;
-    mini_header_reliable_t response = &resp;
     network_address_t myaddress;
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
@@ -161,30 +183,6 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header){
         return;
 }
 
-//send a reply control packet of type message_type using this socket and incoming header
-void send_control(minisocket_t socket, mini_header_reliable_t header, char message_type){
-	network_address_t this_network_address;
-    struct mini_header_reliable resp; //mini_header_reliable_t response = (mini_header_reliable_t)malloc(sizeof(mini_header_reliable));
-    unsigned short int this_port;
-    mini_header_reliable_t response = &resp;
-    network_address_t myaddress;
-    network_get_my_address(myaddress);
-    unpack_address(header->source_address,this_network_address);
-    this_port = unpack_unsigned_short(header->source_port);
-	socket->ack_number++;
-	socket->initialized=1;
-	//reply with MSG_ACK
-	response->protocol = PROTOCOL_MINISTREAM;
-    pack_address(response->destination_address,this_network_address);
-    pack_address(response->source_address,myaddress);
-    pack_unsigned_short(response->destination_port,this_port);
-    pack_unsigned_short(response->source_port,socket->port_number);
-    response->message_type = message_type;
-    pack_unsigned_int(response->seq_number, socket->seq_number);
-    pack_unsigned_int(response->ack_number, socket->ack_number);
-    network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
-}
-
 minisocket_t get_socket(int port_number){
 	if (port_number >= client_upperbound || port_number < 0){
 		printf("ERROR: get_socket");
@@ -192,6 +190,7 @@ minisocket_t get_socket(int port_number){
 	}
 	return ports[port_number];
 }
+
 // Set the socket's control handle function to specific function
 void set_handle (minisocket_t socket, int state) {
 	switch (state)
