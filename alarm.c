@@ -24,15 +24,17 @@ alarm_id alarm_queue;
 
 void
 ring_alarm(){
-    alarm* this_alarm = NULL;
+    alarm* this_alarm;
   	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}   
-    if (-1 == queue_dequeue(alarm_queue,(void *)this_alarm)){
+    if (-1 == queue_dequeue(alarm_queue,(void **)&this_alarm)){
         printf("ring alarm error\n");        
         return;
     }
+    printf("Ringing alarm\n");
     this_alarm->alarm(this_alarm->arg);
+    printf("rung\n");
     free(this_alarm);
 }
 
@@ -75,9 +77,12 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
     alarm* new;
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
+    if (alarm_queue == NULL){
+        alarm_queue = (alarm_id)queue_new();
+    }
     item = (tuple *)malloc(sizeof(tuple));
     item->snd = malloc(sizeof(int));
-    item->snd = 0;
+    *item->snd = 0;
 	new = (alarm *)malloc(sizeof(alarm));
 	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
@@ -90,11 +95,15 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
     item->fst = (int*)&(new->when_to_execute);
 	queue_iterate(alarm_queue,func,(void*)item);
     if (queue_length(alarm_queue) == 0){
+        printf("length is 0 and appending\n");
         queue_append(alarm_queue,(void*)new);
     }
     else{
+        printf("inserting at index = %i\n",*(int*)item->snd);
 	    queue_insert(alarm_queue,(void *)new,*(int*)item->snd);
     }
+    free(item->snd);
+    free(item);
 	set_interrupt_level(old_interrupt_level);
     return new;
 }

@@ -42,7 +42,7 @@ void send_control(minisocket_t socket, mini_header_reliable_t header, char messa
     response->message_type = message_type;
     pack_unsigned_int(response->seq_number, socket->seq_number);
     pack_unsigned_int(response->ack_number, socket->ack_number);
-    network_send_pkt((unsigned int*)response->destination_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
+    network_send_pkt(this_network_address,sizeof(struct mini_header_reliable),(char*)response,0,NULL);
 }
 
 void reset_all(void* s){
@@ -77,12 +77,13 @@ void handle_SYN (minisocket_t socket, mini_header_reliable_t header){ //1
 	//			 set remote_port
 	//			 server will wake up and send SYNACK with retransmitions
 	//else drop
+        printf("in handle syn\n");
 	if(header->message_type == MSG_SYN && unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 			socket->ack_number++;
             unpack_address((header->source_address),socket->remote_address);
             socket->remote_port = unpack_unsigned_short(header->source_port);
-            semaphore_V(socket->server_waiting);
             set_handle(socket,2);
+            semaphore_V(socket->server_waiting);
 	}
 }
 // SERVER AND CLIENT ARE NOW PAIRED
@@ -101,6 +102,7 @@ void handle_control_server (minisocket_t socket, mini_header_reliable_t header){
 			send_control(socket,header,MSG_FIN);
 		}
         else if(header->message_type == MSG_ACK && unpack_unsigned_int(header->ack_number) == socket->seq_number) {
+                printf("setting initialized to 1!\n");
         	socket->initialized = 1;
 		}
     }
@@ -145,12 +147,15 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
+        printf("in handle_synack\n");
+
 	if(header->message_type == MSG_SYNACK &&
 	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
 	   this_port == socket->remote_port &&
 	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
-			send_control(socket,header,MSG_ACK);
+                        printf("recognized and replying\n");
 			socket->ack_number++;
+			send_control(socket,header,MSG_ACK);
 			socket->initialized=1;
 			set_handle(socket,-2);
 	}
@@ -173,6 +178,7 @@ void handle_control_client (minisocket_t socket, mini_header_reliable_t header){
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
+    printf("HANDLE_CONTROL_CLIENT: in handle control client!\n");
 	if (header->message_type == MSG_ACK &&
     this_port==socket->remote_port &&
     (network_compare_network_addresses(this_network_address,socket->remote_address)!=0) &&
@@ -199,6 +205,7 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
+    printf("HANDLEDATA: in handle data! incoming seq number %i =? this ack_number %i + 1\n", unpack_unsigned_int(header->seq_number),socket->ack_number);
 	if(
 	   network_compare_network_addresses(this_network_address,socket->remote_address)!=0 &&
 	   this_port == socket->remote_port &&
@@ -210,6 +217,7 @@ void handle_data (minisocket_t socket, mini_header_reliable_t header, char* data
     if (socket->initialized == 0){
     	socket->initialized = 1;
     }
+    printf("HANDLE_DATA: appending data!\n");
     queue_append(socket->packet_queue,(void*) data);
     semaphore_V(socket->receive_sema);
     socket->ack_number++;
@@ -331,6 +339,7 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 //	set timeout to 100ms
 	timeout = 100;
 //	LOOP while (initialized not raised)
+        printf("server sending MSG_SYNACK\n");
 	while (this_socket->initialized == 0) {
 		loop_nums += 1;
 //		if has looped 7 times server should reset the port and go back to listening mode
@@ -457,6 +466,7 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 	// if none after 7 return SOCKET_NOSERVER and reset remote addr and port
 //	set timeout to 100ms
 	timeout = 100;
+        printf("client sending MSG_SYN\n");
 //	LOOP while (initialized not raised)
 	while (this_socket->initialized == 0) {
 		loop_nums += 1;
@@ -563,6 +573,7 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 //			double timeout
 			timeout = timeout * 2;
 		}
+                printf("MINISOCKETSEND: ack received!\n");
 		socket->send_ack_received = 0;
 		free(header);
 	semaphore_V(socket->outer_send_sema);
@@ -586,11 +597,12 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 		*error = SOCKET_RECEIVEERROR;
 		return -1;
 	}
+        printf("MINISOCKET_RECEIVE: P'ing on outer\n");
 	semaphore_P(socket->outer_receieve_sema);
+                printf("MINISOCKET_RECEIVE: P'ing on receive sema\n");
 		semaphore_P(socket->receive_sema);
-                        printf("Dequeueing\n");
+                        printf("MINISOCKET_RECEIVE: Dequeueing\n");
 			queue_dequeue(socket->packet_queue,(void**)&temp);
-		semaphore_V(socket->receive_sema);
 	semaphore_V(socket->outer_receieve_sema);
 	if (sizeof(*temp) > max_len){
 		*error = SOCKET_OUTOFMEMORY; //maybe just receive error?
@@ -618,6 +630,7 @@ void minisocket_close(minisocket_t socket)
     socket->initialized = 0;
     network_get_my_address(myaddress);
 
+    printf("MINISOCKET_CLOSE\n");
     fin->protocol = PROTOCOL_MINISTREAM;
     pack_address(fin->destination_address,socket->remote_address);
     pack_address(fin->source_address,myaddress);

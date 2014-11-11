@@ -396,6 +396,7 @@ network_handler(network_interrupt_arg_t* packet){
     // if control -> call socket's function
     // if data    -> call socket's handle data
     // if PROTOCOL_MINIDATAGRAM
+    printf("net_handler\n");
     if(header->protocol==PROTOCOL_MINIDATAGRAM) {
         if (port_exists(port_num) == 0){ //if port has not been created by user drop AND FREE the packet
             if(packet) {

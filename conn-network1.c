@@ -90,6 +90,7 @@ int transmit(int* arg) {
     if (error!=SOCKET_NOERROR){
       printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
       /* close the connection */
+      printf("cCCCCccCCCCCccCCCcccCCCCCCCCCCCCCCCCCCCCCCclosing\n");
       minisocket_close(socket);
     
       return -1;
