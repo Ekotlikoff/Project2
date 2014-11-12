@@ -83,7 +83,6 @@ minithread_t getNextThread()
     //FIRST GO 0 to 3
     if(starveCounter%2==0) //get level 0 50% of the time
     {
-        printf("GETNEXTTHREAD: dequeuing\n");
         multilevel_queue_dequeue(readyQueue,0,(void**)&next);
     }
     else if( (starveCounter-1)%4 == 0) // get level 1 25%
@@ -182,7 +181,6 @@ minithread_stop() {
     minithread_t temp; 
     temp = minithread_self();
     next = getNextThread();
-    printf("MINITHREAD_STOP: stopping\n");
     queue_append(blockedList,minithread_self());
     if(next == NULL)
     {
@@ -203,11 +201,7 @@ minithread_stop() {
 void
 minithread_start(minithread_t t) {
     interrupt_level_t last = set_interrupt_level(DISABLED);
-    printf("START: starting thread: %p\n", t);
-    if (-1 == queue_delete(blockedList,t)){
-        printf("MINITHREAD_START: starting thread that is not in blocked list\n");
-    }
-    printf("START: queuelvel is %i\n",t->queueLevel);
+    queue_delete(blockedList,t);
     multilevel_queue_enqueue(readyQueue,t->queueLevel,t);
     set_interrupt_level(last);
 }

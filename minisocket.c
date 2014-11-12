@@ -10,6 +10,8 @@
 #include "alarm.h"
 #include "queue.h"
 
+#include "unistd.h" //for workaround of odd bug, use sleep()
+
 
 #define client_upperbound 65536
 #define server_upperbound 32768
@@ -153,7 +155,6 @@ void handle_SYNACK (minisocket_t socket, mini_header_reliable_t header){ //-1
 	   unpack_unsigned_int(header->seq_number) == socket->ack_number+1)  {
 			socket->ack_number++;
 			send_control(socket,header,MSG_ACK);
-                        printf("client setting initialized to 1\n");
 			socket->initialized=1;
 			set_handle(socket,-2);
 	}
@@ -176,7 +177,6 @@ void handle_control_client (minisocket_t socket, mini_header_reliable_t header){
     network_get_my_address(myaddress);
     unpack_address(header->source_address,this_network_address);
     this_port = unpack_unsigned_short(header->source_port);
-    printf("HANDLE_CONTROL_CLIENT: in handle control client!\n");
 	if (header->message_type == MSG_ACK &&
     this_port==socket->remote_port &&
     (network_compare_network_addresses(this_network_address,socket->remote_address)!=0) &&
@@ -351,7 +351,6 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
    			pack_unsigned_short(synack->destination_port,(unsigned short)this_socket->remote_port);
 		}
 //  	register alarm to V send_lock after timeout
-                printf("SERVER: registering alarm\n");
 		//register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
 //  	network_send
 		network_send_pkt(this_socket->remote_address,
@@ -465,7 +464,6 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 //	set timeout to 100ms
 	timeout = 100;
 //	LOOP while (initialized not raised)
-        printf("client sending syn\n");
 	while (this_socket->initialized == 0) {
 		loop_nums += 1;
 //		if has looped 7 times client should return SOCKET_BUSY reset and return
@@ -490,17 +488,11 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 		network_send_pkt(this_socket->remote_address,
             sizeof(*syn), (char*)syn,
             0, NULL);
-//		P send_lock:
-                //semaphore_V(this_socket->send_sema);
-                printf("CLIENT: timeouting\n");
-		//semaphore_P(this_socket->send_sema);
                 minithread_sleep_with_timeout(timeout);
 //		double timeout
 		timeout = timeout * 2;
-                printf("CLIENT: client checking for initialized==1\n");
 	}
 	free(syn);
-        printf("client created\n");
 	// CLIENT AND SERVER ARE NOW LINKED
 	return this_socket;
 }
@@ -580,7 +572,6 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 //			double timeout
 			timeout = timeout * 2;
 		}
-                printf("MINISOCKETSEND: ack received!\n");
 		socket->send_ack_received = 0;
 		free(header);
 	semaphore_V(socket->outer_send_sema);
@@ -604,11 +595,8 @@ int minisocket_receive(minisocket_t socket, minimsg_t msg, int max_len, minisock
 		*error = SOCKET_RECEIVEERROR;
 		return -1;
 	}
-        printf("MINISOCKET_RECEIVE: P'ing on outer\n");
 	semaphore_P(socket->outer_receieve_sema);
-                printf("MINISOCKET_RECEIVE: P'ing on receive sema\n");
 		semaphore_P(socket->receive_sema);
-                        printf("MINISOCKET_RECEIVE: Dequeueing\n");
 			queue_dequeue(socket->packet_queue,(void**)&temp);
 	semaphore_V(socket->outer_receieve_sema);
 	if (sizeof(*temp) > max_len){
@@ -637,7 +625,6 @@ void minisocket_close(minisocket_t socket)
     socket->initialized = 0;
     network_get_my_address(myaddress);
 
-    printf("MINISOCKET_CLOSE\n");
     fin->protocol = PROTOCOL_MINISTREAM;
     pack_address(fin->destination_address,socket->remote_address);
     pack_address(fin->source_address,myaddress);

@@ -28,7 +28,6 @@ ring_alarm(){
   	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}   
-    printf("RING_ALARM: queue length is %i\n",queue_length(alarm_queue));
     if (-1 == queue_dequeue(alarm_queue,(void **)&this_alarm)){
         printf("ring alarm error\n");        
         return;
@@ -79,7 +78,6 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
     if (alarm_queue == NULL){
         alarm_queue = (alarm_id)queue_new();
     }
-    printf("ALARM: registered\n");
     item = (tuple *)malloc(sizeof(tuple));
     item->snd = malloc(sizeof(int));
     *item->snd = 0;
@@ -91,7 +89,6 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 	new->arg = arg;
     item->fst = (int*)&(new->when_to_execute);
 	queue_iterate(alarm_queue,func,(void*)item);
-    printf("length is %i inserting at index = %i\n",queue_length(alarm_queue),*(int*)item->snd);
     queue_insert(alarm_queue,(void *)new,*(int*)item->snd);
     free(item->snd);
     free(item);
