@@ -111,7 +111,6 @@ int receive(int* arg) {
   network_address_t my_address;
   minisocket_t socket;
   minisocket_error error;
-  printf("in receive\n");
 
   /* 
    * It is crucial that this minithread_yield() works properly
@@ -121,7 +120,6 @@ int receive(int* arg) {
    */
   minithread_yield();
   
-  printf("past yield\n");
   network_get_my_address(my_address);
   
   /* create a network connection to the local machine */
