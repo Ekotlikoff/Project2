@@ -63,7 +63,6 @@ int transmit(int* arg) {
   minisocket_t socket;
   minisocket_error error;
   minithread_t receiver;
-  printf("forking\n");
   receiver = minithread_fork(receive, NULL);
   printf("creating server\n");
   socket = minisocket_server_create(port,&error);
@@ -90,6 +89,7 @@ int transmit(int* arg) {
     if (error!=SOCKET_NOERROR){
       printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
       /* close the connection */
+      printf("cCCCCccCCCCCccCCCcccCCCCCCCCCCCCCCCCCCCCCCclosing\n");
       minisocket_close(socket);
     
       return -1;
@@ -125,7 +125,7 @@ int receive(int* arg) {
   /* create a network connection to the local machine */
   printf("creating client\n");
   socket = minisocket_client_create(my_address, port,&error);
-  printf("created\n");
+  printf("client unblocked\n");
   if (socket==NULL){
     printf("ERROR: %s. Exiting. \n",GetErrorDescription(error));
     return -1;
@@ -141,6 +141,7 @@ int receive(int* arg) {
       minisocket_close(socket);
       return -1;
     }   
+    printf("checking bytes\n");
     /* test the information received */
     for (i=0; i<received_bytes; i++){
       if (buffer[i]!=(char)( (bytes_received+i)%256 )){
@@ -163,6 +164,6 @@ int receive(int* arg) {
 }
 
 int main(int argc, char** argv) {
-  minithread_system_initialize(transmit, NULL);
+  minithread_system_initialize(transmit, NULL);//transmit, NULL);
   return -1;
 }

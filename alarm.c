@@ -24,11 +24,11 @@ alarm_id alarm_queue;
 
 void
 ring_alarm(){
-    alarm* this_alarm = NULL;
+    alarm* this_alarm;
   	if (alarm_queue == NULL){
 		alarm_queue = (alarm_id)queue_new();
 	}   
-    if (-1 == queue_dequeue(alarm_queue,(void *)this_alarm)){
+    if (-1 == queue_dequeue(alarm_queue,(void **)&this_alarm)){
         printf("ring alarm error\n");        
         return;
     }
@@ -54,7 +54,7 @@ func (void* element, void* arg){             //arg is tuple, fst is the to be in
 	if (*out->fst <= this_alarm->when_to_execute){//TODO when ticks rap around this will get slow temporarily
 		return;
 	}
-	*out->snd += 1;
+	(*out->snd)++;
 }
 
 int
@@ -75,13 +75,13 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
     alarm* new;
     interrupt_level_t old_interrupt_level;
     old_interrupt_level = set_interrupt_level(DISABLED);
+    if (alarm_queue == NULL){
+        alarm_queue = (alarm_id)queue_new();
+    }
     item = (tuple *)malloc(sizeof(tuple));
     item->snd = malloc(sizeof(int));
-    item->snd = 0;
+    *item->snd = 0;
 	new = (alarm *)malloc(sizeof(alarm));
-	if (alarm_queue == NULL){
-		alarm_queue = (alarm_id)queue_new();
-	}
 	millis_per_tick = (double)get_quantum()/(double)MILLISECOND;
 	ticks_to_wait = ceiling((double)delay / millis_per_tick);
 	new->when_to_execute = get_clock_ticks() + ticks_to_wait;
@@ -89,12 +89,9 @@ register_alarm(int delay, alarm_handler_t alarm_f, void *arg)
 	new->arg = arg;
     item->fst = (int*)&(new->when_to_execute);
 	queue_iterate(alarm_queue,func,(void*)item);
-    if (queue_length(alarm_queue) == 0){
-        queue_append(alarm_queue,(void*)new);
-    }
-    else{
-	    queue_insert(alarm_queue,(void *)new,*(int*)item->snd);
-    }
+    queue_insert(alarm_queue,(void *)new,*(int*)item->snd);
+    free(item->snd);
+    free(item);
 	set_interrupt_level(old_interrupt_level);
     return new;
 }

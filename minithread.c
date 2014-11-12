@@ -178,7 +178,8 @@ void
 minithread_stop() {
     minithread_t next = NULL;
     interrupt_level_t last = set_interrupt_level(DISABLED);
-    minithread_t temp = minithread_self();
+    minithread_t temp; 
+    temp = minithread_self();
     next = getNextThread();
     queue_append(blockedList,minithread_self());
     if(next == NULL)
@@ -199,7 +200,6 @@ minithread_stop() {
 
 void
 minithread_start(minithread_t t) {
-
     interrupt_level_t last = set_interrupt_level(DISABLED);
     queue_delete(blockedList,t);
     multilevel_queue_enqueue(readyQueue,t->queueLevel,t);
@@ -304,8 +304,8 @@ clock_handler(void* arg)
     interrupt_level_t old_interrupt_level;
 
     old_interrupt_level = set_interrupt_level(DISABLED);
+ //   printf("Current clock ticks = %i, first execution ticks = %i\n", (int)get_clock_ticks(), (int)first_execution_tick());
     while (get_clock_ticks() == first_execution_tick()){
-        //printf("About to ring_alarm\n");
         ring_alarm();
     }
     increment_clock_ticks(clock_ticks);

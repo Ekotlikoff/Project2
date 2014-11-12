@@ -61,12 +61,12 @@ get(queue_t queue, int index){
 int
 queue_insert(queue_t queue, void* item, int index){
   node* previous;
-  node* new = (node *)malloc(sizeof(node));
+  node* new; 
   if(!queue)
   {
         return -1;
   }
-  if (index >= queue->length){
+  if (index > queue->length){
     printf("queue_insert error - index out of bounds\n");
     return -1;
   }
@@ -79,6 +79,7 @@ queue_insert(queue_t queue, void* item, int index){
   else if (index == queue->length){
     return queue_append(queue, item);
   }
+  new = (node *)malloc(sizeof(node));
   previous = get(queue, index-1);
   new->val = item;
   new->next = previous->next;
@@ -146,11 +147,13 @@ queue_dequeue(queue_t queue, void** item) {
   node* temp;
   if(!queue)
   {
+    printf("DEQUEUE: queue is NULL\n");
     return -1;
   }
   *item = NULL;
   if (queue->length == 0){
     *item = NULL;
+    printf("DEQUEUE: length is 0\n");
     return -1;
   }
   *item = queue->first->val;
@@ -231,23 +234,24 @@ queue_delete(queue_t queue, void* item) {
   node* next;
 
   if (queue == NULL){
-    return -1;
+      printf("QUEUE DELETE: queue is null\n");
+      return -1;
   }
   if(queue->length == 0)
   {
+      printf("QUEUE DELETE: queue is empty\n");
       return -1;
   }
 
   if(queue->first==NULL)
   {
-      printf("length %i \n",queue->length);
-      printf("Error non-zero but first is null\n");
+      printf("QUEUE_DELETE: Error non-zero but first is null\n");
       return -1;
   }
   prev = NULL;
   current = queue->first;
   next = current->next;
-  for(counter =0;counter < queue->length && current && next; counter++)
+  for(counter =0;counter < queue->length && current; counter++)
   {
       if(current->val==item)
       {
@@ -259,7 +263,7 @@ queue_delete(queue_t queue, void* item) {
           {
               queue->first = next;
           }
-          if(!next)
+          if(!next||counter==queue->length-1)
           {
             queue->last = prev;
           }

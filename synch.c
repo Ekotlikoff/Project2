@@ -85,7 +85,9 @@ void semaphore_V(semaphore_t sem) {
   void* thread = NULL;
   old_interrupt_level = set_interrupt_level(DISABLED);
   if ((++(sem->count))<=0){
-    queue_dequeue(sem->queue,&thread);
+    if (-1 == queue_dequeue(sem->queue,&thread)){
+      printf("SEMA_V: dequeue error\n");
+    }
     minithread_start((minithread_t )thread);
   }
   set_interrupt_level(old_interrupt_level);
