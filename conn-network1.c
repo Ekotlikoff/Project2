@@ -164,6 +164,6 @@ int receive(int* arg) {
 }
 
 int main(int argc, char** argv) {
-  minithread_system_initialize(transmit, NULL);
+  minithread_system_initialize(transmit, NULL);//transmit, NULL);
   return -1;
 }

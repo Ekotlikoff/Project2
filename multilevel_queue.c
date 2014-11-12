@@ -36,7 +36,7 @@ multilevel_queue_t multilevel_queue_new(int number_of_levels)
 }
 
 int level_out_of_range(multilevel_queue_t queue, int level){
-	if (queue->number_of_levels <= level){
+	if (queue->number_of_levels <= level || level < 0){
 		//printf("Level out of range, dequeue failed\n");
 		return 1;
 	}

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "minisocket.h"
 #include "miniheader.h"
+#include "minithread.h"
 #include "synch.h"
 #include "alarm.h"
 #include "queue.h"
@@ -248,10 +249,10 @@ void set_handle (minisocket_t socket, int state) {
 }
 
 // alarm function to wakeup the sending thread for retransmission
-void send_alarm_helper(void* sema){
-        printf("SEMA ADDR = %p\n", sema);
-	semaphore_V ((semaphore_t) sema);
-}
+//void send_alarm_helper(void* sema){
+//        printf("SEMA ADDR = %p\n", sema);
+//	semaphore_V ((semaphore_t) sema);
+//}
 
 /* Initializes the minisocket layer. */
 void minisocket_initialize()
@@ -351,13 +352,14 @@ minisocket_t minisocket_server_create(int port, minisocket_error *error)
 		}
 //  	register alarm to V send_lock after timeout
                 printf("SERVER: registering alarm\n");
-		register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
+		//register_alarm(timeout,send_alarm_helper,(void*)this_socket->send_sema);
 //  	network_send
 		network_send_pkt(this_socket->remote_address,
             sizeof(*synack), (char*)synack,
             0, NULL);
 //		P send_lock:
-		semaphore_P(this_socket->send_sema);
+		//semaphore_P(this_socket->send_sema);
+                minithread_sleep_with_timeout(timeout);
 //		double timeout
 		timeout = timeout * 2;
 	}
@@ -482,8 +484,8 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 			return NULL;
 		}
 //  	register alarm to V send_lock after timeout
-		register_alarm(timeout,send_alarm_helper,(void*)(this_socket->send_sema)); 
-                printf("SEND_SEMA_ADDR = %p\n", this_socket->send_sema);
+		//register_alarm(timeout,send_alarm_helper,(void*)(this_socket->send_sema)); 
+                //printf("SEND_SEMA_ADDR = %p\n", this_socket->send_sema);
 //  	network_send
 		network_send_pkt(this_socket->remote_address,
             sizeof(*syn), (char*)syn,
@@ -491,7 +493,8 @@ minisocket_t minisocket_client_create(network_address_t addr, int port, minisock
 //		P send_lock:
                 //semaphore_V(this_socket->send_sema);
                 printf("CLIENT: timeouting\n");
-		semaphore_P(this_socket->send_sema);
+		//semaphore_P(this_socket->send_sema);
+                minithread_sleep_with_timeout(timeout);
 //		double timeout
 		timeout = timeout * 2;
                 printf("CLIENT: client checking for initialized==1\n");
@@ -566,13 +569,14 @@ int minisocket_send(minisocket_t socket, minimsg_t msg, int len, minisocket_erro
 				return -1;
 			}
 //  		register alarm to V send_lock after timeout
-			register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
+			//register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
 //  		network_send
 			bytes_sent = network_send_pkt(socket->remote_address,
                  sizeof(*header), (char*)header,
                  len, msg);
 //			P send_lock:
-			semaphore_P(socket->send_sema);
+			//semaphore_P(socket->send_sema);
+                        minithread_sleep_with_timeout(timeout);
 //			double timeout
 			timeout = timeout * 2;
 		}
@@ -645,13 +649,14 @@ void minisocket_close(minisocket_t socket)
 	while (socket->send_ack_received == 0 || loop_nums < 8) {
 		loop_nums += 1;
 //  		register alarm to V send_lock after timeout
-		register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
+		//register_alarm(timeout,send_alarm_helper,(void*)socket->send_sema);
 //  		network_send
 		network_send_pkt(socket->remote_address,
          	sizeof(*fin), (char*)fin,
          	0, NULL);
 //			P send_lock:
-		semaphore_P(socket->send_sema);
+		//semaphore_P(socket->send_sema);
+                minithread_sleep_with_timeout(timeout);
 //			double timeout
 		timeout = timeout * 2;
 	}
